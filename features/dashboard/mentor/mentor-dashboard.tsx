@@ -137,6 +137,30 @@ export async function MentorDashboard({ user }: { user: AppUser }) {
           </ul>
         </section>
       ) : null}
+
+      {/* Roster */}
+      {interns.length > 0 ? (
+        <section className="mt-10 space-y-4">
+          <SectionHeader
+            title="Your interns"
+            description="Open anyone to see their full week-by-week history"
+            icon={Users}
+          />
+          <ul className="space-y-2">
+            {interns.map((s) => (
+              <InternRow
+                key={s.user.id}
+                summary={s}
+                href={
+                  s.internship
+                    ? ROUTES.intern(s.internship.id)
+                    : ROUTES.dashboard
+                }
+              />
+            ))}
+          </ul>
+        </section>
+      ) : null}
     </PageContainer>
   );
 }
