@@ -1,13 +1,12 @@
 "use client";
 
 import * as React from "react";
-import { useForm } from "react-hook-form";
+import { useForm, type UseFormRegisterReturn } from "react-hook-form";
 import { motion, useReducedMotion } from "framer-motion";
 import { toast } from "sonner";
 import { ArrowLeft, ArrowRight, Send, X } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Textarea } from "@/components/ui/textarea";
-import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { LinkButton } from "@/components/shared/link-button";
 import { useAutosave } from "@/hooks/use-autosave";
@@ -15,13 +14,12 @@ import { moodLevel } from "@/lib/domain";
 import { ROUTES } from "@/lib/constants";
 import { cn } from "@/lib/utils";
 import {
+  MIN_CHARS,
   reportSubmitSchema,
   type ReportFormValues,
 } from "@/schemas/weekly-report";
 import { saveWeeklyDraft, submitWeeklyReport } from "../actions";
 import { MoodPicker } from "./mood-picker";
-import { ScaleField } from "./scale-field";
-import { RatingScale } from "./rating-scale";
 import { LearningLogEditor } from "./learning-log-editor";
 import { AutosaveIndicator } from "./autosave-indicator";
 
@@ -41,11 +39,12 @@ interface WizardProps {
     label: string;
   };
   initialValues: ReportFormValues;
-  skills: Option[];
   categories: Option[];
   sources: Option[];
   projects: Option[];
 }
+
+const MIN_LEARNINGS = 3;
 
 const STEPS = [
   {
@@ -65,16 +64,6 @@ const STEPS = [
       "Capture each learning as its own entry — this is the heart of Altiora.",
   },
   {
-    key: "skills",
-    title: "Skill growth",
-    subtitle: "Where are your skills this week? Trust your gut.",
-  },
-  {
-    key: "confidence",
-    title: "Wrapping up",
-    subtitle: "How confident do you feel, and how much did you work?",
-  },
-  {
     key: "review",
     title: "Review",
     subtitle: "One last look before you submit.",
@@ -84,7 +73,7 @@ const STEPS = [
 type StepKey = (typeof STEPS)[number]["key"];
 
 export function ReportWizard(props: WizardProps) {
-  const { internshipId, week, initialValues, skills } = props;
+  const { internshipId, week, initialValues } = props;
   const reduce = useReducedMotion();
   const form = useForm<ReportFormValues>({ defaultValues: initialValues });
   const values = form.watch();
@@ -126,13 +115,11 @@ export function ReportWizard(props: WizardProps) {
         return values.mood !== null;
       case "reflection":
         return (
-          values.achievement.trim().length > 0 &&
-          values.challenge.trim().length > 0
+          values.achievement.trim().length >= MIN_CHARS &&
+          values.challenge.trim().length >= MIN_CHARS
         );
       case "learning":
-        return values.learningLogs.length > 0;
-      case "skills":
-        return values.skillScores.length === skills.length;
+        return values.learningLogs.length >= MIN_LEARNINGS;
       default:
         return true;
     }
@@ -215,13 +202,10 @@ export function ReportWizard(props: WizardProps) {
           animate={{ opacity: 1, y: 0 }}
           transition={{ duration: 0.24, ease: [0.16, 1, 0.3, 1] }}
         >
-          <div className="mb-6 space-y-1.5">
+          <div className="mb-6">
             <h1 className="text-2xl font-semibold tracking-tight">
               {STEPS[step]!.title}
             </h1>
-            <p className="text-muted-foreground text-sm">
-              {STEPS[step]!.subtitle}
-            </p>
           </div>
           {renderStep(currentKey)}
         </motion.div>
@@ -258,132 +242,57 @@ export function ReportWizard(props: WizardProps) {
     switch (key) {
       case "mood":
         return (
-          <div className="space-y-8">
-            <MoodPicker
-              value={values.mood}
-              onChange={(v) => setValue("mood", v)}
-            />
-            <div className="space-y-3">
-              <Label>How satisfied are you with your week?</Label>
-              <ScaleField
-                value={values.satisfaction}
-                onChange={(v) => setValue("satisfaction", v)}
-                minLabel="Not at all"
-                maxLabel="Completely"
-              />
-            </div>
-          </div>
+          <MoodPicker value={values.mood} onChange={(v) => setValue("mood", v)} />
         );
       case "reflection":
         return (
           <div className="space-y-5">
-            <Field label="Your biggest achievement" required>
-              <Textarea
-                rows={3}
-                placeholder="What went well? What are you proud of?"
-                {...form.register("achievement")}
-              />
-            </Field>
-            <Field label="A challenge you faced" required>
-              <Textarea
-                rows={3}
-                placeholder="What was hard this week?"
-                {...form.register("challenge")}
-              />
-            </Field>
-            <Field label="How you approached it" hint="Optional">
-              <Textarea
-                rows={2}
-                placeholder="What did you try? What worked?"
-                {...form.register("solution")}
-              />
-            </Field>
-            <Field label="Where you'd like mentor support" hint="Optional">
-              <Textarea
-                rows={2}
-                placeholder="Anything you'd like help or feedback on?"
-                {...form.register("mentorHelp")}
-              />
-            </Field>
+            <ReflectionField
+              label="Your biggest achievement"
+              chars={values.achievement.trim().length}
+              placeholder="What went well? What are you proud of? Go into detail — the context, what you actually did, and why it mattered."
+              register={form.register("achievement")}
+            />
+            <ReflectionField
+              label="A challenge you faced"
+              chars={values.challenge.trim().length}
+              placeholder="What was hard this week? What made it difficult, how did you work through it, and what would you do differently?"
+              register={form.register("challenge")}
+            />
           </div>
         );
-      case "learning":
+      case "learning": {
+        const count = values.learningLogs.length;
+        const enough = count >= MIN_LEARNINGS;
         return (
-          <LearningLogEditor
-            logs={values.learningLogs}
-            onChange={(logs) => setValue("learningLogs", logs)}
-            categories={props.categories}
-            sources={props.sources}
-            projects={props.projects}
-          />
-        );
-      case "skills":
-        return (
-          <div className="space-y-4">
-            {skills.map((skill) => {
-              const score =
-                values.skillScores.find((s) => s.skillId === skill.id)?.score ??
-                null;
-              return (
-                <div
-                  key={skill.id}
-                  className="flex items-center justify-between gap-4"
-                >
-                  <span className="text-sm font-medium">{skill.name}</span>
-                  <RatingScale
-                    ariaLabel={skill.name}
-                    value={score}
-                    onChange={(v) => {
-                      const next = values.skillScores.some(
-                        (s) => s.skillId === skill.id,
-                      )
-                        ? values.skillScores.map((s) =>
-                            s.skillId === skill.id ? { ...s, score: v } : s,
-                          )
-                        : [
-                            ...values.skillScores,
-                            { skillId: skill.id, score: v },
-                          ];
-                      setValue("skillScores", next);
-                    }}
-                    className="w-52 shrink-0"
-                  />
-                </div>
-              );
-            })}
-          </div>
-        );
-      case "confidence":
-        return (
-          <div className="space-y-8">
-            <div className="space-y-3">
-              <Label>How confident do you feel right now?</Label>
-              <ScaleField
-                value={values.confidence}
-                onChange={(v) => setValue("confidence", v)}
-                minLabel="Still finding my feet"
-                maxLabel="Very confident"
-              />
+          <div className="space-y-3">
+            <div className="border-border flex items-center justify-between gap-3 rounded-lg border px-3.5 py-2.5">
+              <span
+                className={cn(
+                  "text-sm",
+                  enough
+                    ? "text-success font-medium"
+                    : "text-muted-foreground",
+                )}
+              >
+                {enough
+                  ? "Great — you've captured enough for this week."
+                  : `Add at least ${MIN_LEARNINGS} learnings to continue.`}
+              </span>
+              <span className="text-muted-foreground text-sm font-medium tabular-nums">
+                {count}/{MIN_LEARNINGS}
+              </span>
             </div>
-            <Field label="Working hours this week" hint="Optional">
-              <Input
-                type="number"
-                inputMode="numeric"
-                min={0}
-                max={168}
-                placeholder="e.g. 40"
-                className="max-w-40"
-                value={values.workingHours ?? ""}
-                onChange={(e) =>
-                  setValue(
-                    "workingHours",
-                    e.target.value === "" ? null : Number(e.target.value),
-                  )
-                }
-              />
-            </Field>
+            <LearningLogEditor
+              logs={values.learningLogs}
+              onChange={(logs) => setValue("learningLogs", logs)}
+              categories={props.categories}
+              sources={props.sources}
+              projects={props.projects}
+            />
           </div>
         );
+      }
       case "review":
         return <ReviewStep />;
       default:
@@ -400,11 +309,6 @@ export function ReportWizard(props: WizardProps) {
         value: mood ? `${mood.emoji} ${mood.label}` : "—",
       },
       {
-        label: "Satisfaction",
-        step: "mood",
-        value: `${values.satisfaction}/10`,
-      },
-      {
         label: "Achievement",
         step: "reflection",
         value: values.achievement.trim() || "—",
@@ -418,21 +322,6 @@ export function ReportWizard(props: WizardProps) {
         label: "Learnings",
         step: "learning",
         value: `${values.learningLogs.length} captured`,
-      },
-      {
-        label: "Skills rated",
-        step: "skills",
-        value: `${values.skillScores.length}/${skills.length}`,
-      },
-      {
-        label: "Confidence",
-        step: "confidence",
-        value: `${values.confidence}/10`,
-      },
-      {
-        label: "Working hours",
-        step: "confidence",
-        value: values.workingHours != null ? `${values.workingHours}h` : "—",
       },
     ];
     return (
@@ -462,29 +351,38 @@ export function ReportWizard(props: WizardProps) {
   }
 }
 
-function Field({
+function ReflectionField({
   label,
-  hint,
-  required,
-  children,
+  chars,
+  placeholder,
+  register,
 }: {
   label: string;
-  hint?: string;
-  required?: boolean;
-  children: React.ReactNode;
+  chars: number;
+  placeholder: string;
+  register: UseFormRegisterReturn;
 }) {
+  const valid = chars >= MIN_CHARS;
   return (
     <div className="space-y-2">
-      <div className="flex items-center justify-between">
+      <div className="flex items-center justify-between gap-2">
         <Label>
           {label}
-          {required ? <span className="text-primary ml-0.5">*</span> : null}
+          <span className="text-primary ml-0.5">*</span>
         </Label>
-        {hint ? (
-          <span className="text-muted-foreground text-xs">{hint}</span>
-        ) : null}
+        <span
+          className={cn(
+            "text-xs tabular-nums",
+            valid ? "text-success" : "text-muted-foreground",
+          )}
+        >
+          {chars}/{MIN_CHARS} characters
+        </span>
       </div>
-      {children}
+      <Textarea rows={7} placeholder={placeholder} {...register} />
+      <p className="text-muted-foreground text-xs">
+        Go deep — at least {MIN_CHARS} characters.
+      </p>
     </div>
   );
 }

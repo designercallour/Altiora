@@ -3,10 +3,9 @@
 import * as React from "react";
 import { BookOpen, Check, Pencil, Plus, Trash2, X } from "lucide-react";
 import { Button } from "@/components/ui/button";
-import { Badge } from "@/components/ui/badge";
-import { Input } from "@/components/ui/input";
+import { Textarea } from "@/components/ui/textarea";
 import { Label } from "@/components/ui/label";
-import { Switch } from "@/components/ui/switch";
+import { cn } from "@/lib/utils";
 import {
   Dialog,
   DialogContent,
@@ -14,16 +13,8 @@ import {
   DialogHeader,
   DialogTitle,
 } from "@/components/ui/dialog";
-import {
-  Select,
-  SelectContent,
-  SelectItem,
-  SelectTrigger,
-  SelectValue,
-} from "@/components/ui/select";
 import { EmptyState } from "@/components/shared/empty-state";
 import type { LearningLogInput } from "@/services/data-source";
-import { RatingScale } from "./rating-scale";
 
 interface Option {
   id: string;
@@ -33,12 +24,13 @@ interface Option {
 interface LearningLogEditorProps {
   logs: LearningLogInput[];
   onChange: (logs: LearningLogInput[]) => void;
-  categories: Option[];
-  sources: Option[];
-  projects: Option[];
+  // Retained for compatibility; the dialog no longer collects these.
+  categories?: Option[];
+  sources?: Option[];
+  projects?: Option[];
 }
 
-const NONE = "__none__";
+const MIN_CHARS = 300;
 
 function emptyLog(): LearningLogInput {
   return {
@@ -46,31 +38,19 @@ function emptyLog(): LearningLogInput {
     learningCategoryId: null,
     learningSourceId: null,
     projectId: null,
-    difficulty: 3,
-    confidence: 3,
-    impact: 3,
+    difficulty: null,
+    confidence: null,
+    impact: null,
     applied: false,
   };
 }
 
-export function LearningLogEditor({
-  logs,
-  onChange,
-  categories,
-  sources,
-  projects,
-}: LearningLogEditorProps) {
+export function LearningLogEditor({ logs, onChange }: LearningLogEditorProps) {
   const [open, setOpen] = React.useState(false);
   const [draft, setDraft] = React.useState<LearningLogInput>(emptyLog());
   const [editingIndex, setEditingIndex] = React.useState<number | null>(null);
-
-  const nameById = React.useMemo(() => {
-    const m = new Map<string, string>();
-    [...categories, ...sources, ...projects].forEach((o) =>
-      m.set(o.id, o.name),
-    );
-    return m;
-  }, [categories, sources, projects]);
+  const titleChars = draft.title.trim().length;
+  const titleValid = titleChars >= MIN_CHARS;
 
   function openAdd() {
     setDraft(emptyLog());
@@ -86,7 +66,7 @@ export function LearningLogEditor({
     onChange(logs.filter((_, i) => i !== index));
   }
   function commit() {
-    if (!draft.title.trim()) return;
+    if (!titleValid) return;
     const next = [...logs];
     if (editingIndex === null) next.push(draft);
     else next[editingIndex] = draft;
@@ -122,30 +102,9 @@ export function LearningLogEditor({
                 <span className="bg-primary/10 text-primary mt-0.5 flex size-8 shrink-0 items-center justify-center rounded-lg">
                   <BookOpen className="size-4" />
                 </span>
-                <div className="min-w-0 flex-1 space-y-1.5">
-                  <p className="text-sm font-medium">{log.title}</p>
-                  <div className="flex flex-wrap items-center gap-1.5">
-                    {log.learningCategoryId ? (
-                      <Badge variant="secondary">
-                        {nameById.get(log.learningCategoryId)}
-                      </Badge>
-                    ) : null}
-                    {log.learningSourceId ? (
-                      <Badge variant="outline">
-                        {nameById.get(log.learningSourceId)}
-                      </Badge>
-                    ) : null}
-                    {log.applied ? (
-                      <Badge variant="outline" className="gap-1">
-                        <Check className="size-3" />
-                        Applied
-                      </Badge>
-                    ) : null}
-                    <span className="text-muted-foreground text-xs">
-                      Impact {log.impact ?? "–"}/5
-                    </span>
-                  </div>
-                </div>
+                <p className="min-w-0 flex-1 text-sm leading-relaxed whitespace-pre-line">
+                  {log.title}
+                </p>
                 <div className="flex shrink-0 items-center gap-0.5">
                   <Button
                     type="button"
@@ -184,123 +143,30 @@ export function LearningLogEditor({
             </DialogTitle>
           </DialogHeader>
 
-          <div className="space-y-4">
-            <div className="space-y-2">
+          <div className="space-y-2">
+            <div className="flex items-center justify-between gap-2">
               <Label htmlFor="log-title">What did you learn?</Label>
-              <Input
-                id="log-title"
-                autoFocus
-                placeholder="e.g. Auto-layout patterns for responsive components"
-                value={draft.title}
-                onChange={(e) => patch({ title: e.target.value })}
-              />
+              <span
+                className={cn(
+                  "text-xs tabular-nums",
+                  titleValid ? "text-success" : "text-muted-foreground",
+                )}
+              >
+                {titleChars}/{MIN_CHARS} characters
+              </span>
             </div>
-
-            <div className="grid grid-cols-2 gap-3">
-              <div className="space-y-2">
-                <Label>Category</Label>
-                <Select
-                  value={draft.learningCategoryId ?? undefined}
-                  onValueChange={(v) => patch({ learningCategoryId: v })}
-                >
-                  <SelectTrigger className="w-full">
-                    <SelectValue placeholder="Select" />
-                  </SelectTrigger>
-                  <SelectContent>
-                    {categories.map((c) => (
-                      <SelectItem key={c.id} value={c.id}>
-                        {c.name}
-                      </SelectItem>
-                    ))}
-                  </SelectContent>
-                </Select>
-              </div>
-              <div className="space-y-2">
-                <Label>Source</Label>
-                <Select
-                  value={draft.learningSourceId ?? undefined}
-                  onValueChange={(v) => patch({ learningSourceId: v })}
-                >
-                  <SelectTrigger className="w-full">
-                    <SelectValue placeholder="Select" />
-                  </SelectTrigger>
-                  <SelectContent>
-                    {sources.map((s) => (
-                      <SelectItem key={s.id} value={s.id}>
-                        {s.name}
-                      </SelectItem>
-                    ))}
-                  </SelectContent>
-                </Select>
-              </div>
-            </div>
-
-            {projects.length ? (
-              <div className="space-y-2">
-                <Label>Project (optional)</Label>
-                <Select
-                  value={draft.projectId ?? NONE}
-                  onValueChange={(v) =>
-                    patch({ projectId: v === NONE ? null : v })
-                  }
-                >
-                  <SelectTrigger className="w-full">
-                    <SelectValue placeholder="No project" />
-                  </SelectTrigger>
-                  <SelectContent>
-                    <SelectItem value={NONE}>No project</SelectItem>
-                    {projects.map((p) => (
-                      <SelectItem key={p.id} value={p.id}>
-                        {p.name}
-                      </SelectItem>
-                    ))}
-                  </SelectContent>
-                </Select>
-              </div>
-            ) : null}
-
-            <div className="grid grid-cols-3 gap-3">
-              <div className="space-y-1.5">
-                <Label className="text-xs">Difficulty</Label>
-                <RatingScale
-                  ariaLabel="Difficulty"
-                  value={draft.difficulty}
-                  onChange={(v) => patch({ difficulty: v })}
-                />
-              </div>
-              <div className="space-y-1.5">
-                <Label className="text-xs">Confidence</Label>
-                <RatingScale
-                  ariaLabel="Confidence"
-                  value={draft.confidence}
-                  onChange={(v) => patch({ confidence: v })}
-                />
-              </div>
-              <div className="space-y-1.5">
-                <Label className="text-xs">Impact</Label>
-                <RatingScale
-                  ariaLabel="Impact"
-                  value={draft.impact}
-                  onChange={(v) => patch({ impact: v })}
-                />
-              </div>
-            </div>
-
-            <div className="border-border flex items-center justify-between rounded-lg border p-3">
-              <div className="space-y-0.5">
-                <Label htmlFor="log-applied" className="font-medium">
-                  Applied it already?
-                </Label>
-                <p className="text-muted-foreground text-xs">
-                  Did you put this learning into practice?
-                </p>
-              </div>
-              <Switch
-                id="log-applied"
-                checked={draft.applied}
-                onCheckedChange={(v) => patch({ applied: v })}
-              />
-            </div>
+            <Textarea
+              id="log-title"
+              autoFocus
+              rows={8}
+              placeholder="Describe this learning in depth — what it was, how you learned it, and why it matters. Concrete examples help. At least 300 characters."
+              value={draft.title}
+              onChange={(e) => patch({ title: e.target.value })}
+            />
+            <p className="text-muted-foreground text-xs">
+              Go deep — this is where the real learning lives (min {MIN_CHARS}{" "}
+              characters).
+            </p>
           </div>
 
           <DialogFooter>
@@ -308,7 +174,7 @@ export function LearningLogEditor({
               <X />
               Cancel
             </Button>
-            <Button onClick={commit} disabled={!draft.title.trim()}>
+            <Button onClick={commit} disabled={!titleValid}>
               <Check />
               {editingIndex === null ? "Add learning" : "Save"}
             </Button>

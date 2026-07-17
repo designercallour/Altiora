@@ -15,8 +15,9 @@ import {
   CommandSeparator,
   CommandShortcut,
 } from "@/components/ui/command";
-import { PRIMARY_NAV, SECONDARY_NAV } from "@/lib/nav";
+import { PRIMARY_NAV, SECONDARY_NAV, navFor } from "@/lib/nav";
 import { ROUTES } from "@/lib/constants";
+import type { UserRole } from "@/types/domain";
 
 interface CommandMenuContextValue {
   open: boolean;
@@ -36,8 +37,10 @@ export function useCommandMenu(): CommandMenuContextValue {
 
 export function CommandMenuProvider({
   children,
+  role,
 }: {
   children: React.ReactNode;
+  role: UserRole;
 }) {
   const [open, setOpen] = React.useState(false);
   const router = useRouter();
@@ -78,7 +81,7 @@ export function CommandMenuProvider({
             </CommandGroup>
             <CommandSeparator />
             <CommandGroup heading="Navigate">
-              {[...PRIMARY_NAV, ...SECONDARY_NAV].map((item) => {
+              {navFor([...PRIMARY_NAV, ...SECONDARY_NAV], role).map((item) => {
                 const Icon = item.icon;
                 return (
                   <CommandItem

@@ -28,8 +28,10 @@ import type {
   Team,
   WeeklyReport,
   WeeklySkillScore,
+  LearningIntelligence,
 } from "@/types/domain";
 import { Prng } from "./prng";
+import { stubExtract } from "@/services/ai/stub";
 import {
   ACHIEVEMENTS,
   ADMIN,
@@ -70,7 +72,14 @@ export interface MockDataset {
   skillScores: WeeklySkillScore[];
   learningLogs: LearningLog[];
   feedback: MentorFeedback[];
+  intelligence: ReportIntelligence[];
   currentUserId: string;
+}
+
+/** AI-extracted learning signal, keyed to a report. */
+export interface ReportIntelligence {
+  reportId: string;
+  data: LearningIntelligence;
 }
 
 const clamp = (n: number, min: number, max: number) =>
@@ -229,6 +238,7 @@ export function generateDataset(): MockDataset {
   const skillScores: WeeklySkillScore[] = [];
   const learningLogs: LearningLog[] = [];
   const feedback: MentorFeedback[] = [];
+  const intelligence: ReportIntelligence[] = [];
 
   for (const internship of internships) {
     const cohort = cohorts.find((c) => c.id === internship.cohortId)!;
@@ -283,6 +293,7 @@ export function generateDataset(): MockDataset {
         workingHours: rng.bool(0.85) ? rng.float(34, 46, 1) : null,
         status: "submitted",
         submittedAt: endTs,
+        reviewedAt: null,
         createdAt: endTs,
         updatedAt: endTs,
         deletedAt: null,
@@ -307,16 +318,19 @@ export function generateDataset(): MockDataset {
       }
 
       // Learning logs.
+      const logTitles: string[] = [];
       for (let l = 0; l < LOGS_PER_REPORT; l++) {
         const source = rng.pickWeighted(learningSources, sourceWeights);
         const attributed = rng.bool(0.5);
+        const title = rng.pick(LEARNING_TITLES);
+        logTitles.push(title);
         learningLogs.push({
           id: rng.uuid(),
           reportId: report.id,
           learningCategoryId: rng.pick(learningCategories).id,
           learningSourceId: source.id,
           projectId: attributed ? internship.projectId : null,
-          title: rng.pick(LEARNING_TITLES),
+          title,
           difficulty: rng.int(1, 5),
           confidence: clamp(Math.round(2.5 + g * 2 + rng.int(-1, 1)), 1, 5),
           impact: clamp(Math.round(3 + g + rng.int(-1, 1)), 1, 5),
@@ -326,11 +340,22 @@ export function generateDataset(): MockDataset {
           deletedAt: null,
         });
       }
+
+      // AI-extracted learning signal (deterministic stub for the seed).
+      const corpus = [report.achievement, report.challenge, ...logTitles]
+        .filter((s): s is string => Boolean(s))
+        .join("\n\n");
+      intelligence.push({
+        reportId: report.id,
+        data: stubExtract(corpus),
+      });
     });
 
-    // Feedback on every report except the most recent (leaves it "needs review").
+    // Every report except the most recent is marked reviewed (leaves the
+    // latest "needs review"). Older reports also carry legacy mentor feedback.
     internReports.slice(0, -1).forEach((report, idx) => {
       const g = idx / Math.max(1, internReports.length - 2);
+      report.reviewedAt = `${report.endDate}T20:00:00.000Z`;
       feedback.push({
         id: rng.uuid(),
         reportId: report.id,
@@ -366,6 +391,7 @@ export function generateDataset(): MockDataset {
     skillScores,
     learningLogs,
     feedback,
+    intelligence,
     currentUserId: interns[0]!.id,
   };
 }

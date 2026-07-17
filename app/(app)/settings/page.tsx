@@ -28,18 +28,6 @@ const NOTIFICATIONS = [
     description: "A gentle nudge when a new week's report is due.",
     checked: true,
   },
-  {
-    id: "mentor-feedback",
-    label: "Mentor feedback",
-    description: "Get notified when your mentor reviews a report.",
-    checked: true,
-  },
-  {
-    id: "product-updates",
-    label: "Product updates",
-    description: "Occasional news about new Altiora features.",
-    checked: false,
-  },
 ];
 
 export default async function SettingsPage() {

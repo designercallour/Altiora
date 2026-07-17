@@ -141,6 +141,7 @@ export interface WeeklyReport extends Timestamps, SoftDelete {
   workingHours: number | null;
   status: ReportStatus;
   submittedAt: string | null;
+  reviewedAt: string | null; // set when a mentor marks the report reviewed
 }
 
 export interface WeeklySkillScore {
@@ -172,6 +173,33 @@ export interface MentorFeedback extends Timestamps, SoftDelete {
   rating: number | null; // 1..5
 }
 
+// ── Learning intelligence (AI-extracted from reflection text) ─────────────────
+
+export type LearningStatus = "New Learning" | "Continued Practice" | "Mastery";
+export type LearningImportance = "Low" | "Medium" | "High";
+
+export interface ExtractedSkill {
+  name: string;
+  confidence: number; // 0..1
+  learningStatus: LearningStatus;
+  importance: LearningImportance;
+  evidence: string;
+}
+
+export interface ExtractedConcept {
+  name: string;
+  relatedSkill: string;
+}
+
+/** Structured signal Claude extracts from a report's reflection + learnings. */
+export interface LearningIntelligence {
+  summary: string;
+  skills: ExtractedSkill[];
+  concepts: ExtractedConcept[];
+  learningDirection: string[];
+  recommendedTopics: string[];
+}
+
 // ── Composite / read-model types ──────────────────────────────────────────────
 
 /** A fully-hydrated report, as the Weekly Report screen and detail views need it. */
@@ -179,6 +207,7 @@ export interface WeeklyReportDetail extends WeeklyReport {
   learningLogs: LearningLog[];
   skillScores: WeeklySkillScore[];
   feedback: MentorFeedback | null;
+  intelligence: LearningIntelligence | null;
 }
 
 /** An intern with just enough context for mentor/admin lists. */
@@ -190,7 +219,7 @@ export interface InternSummary {
   mentor: Pick<AppUser, "id" | "fullName" | "avatarUrl"> | null;
   latestReport: WeeklyReport | null;
   submittedCount: number;
-  needsReview: boolean; // has a submitted report without feedback
+  needsReview: boolean; // has a submitted report not yet marked reviewed
 }
 
 /** All lookup data, loaded once and passed to forms/filters. */

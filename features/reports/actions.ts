@@ -8,6 +8,22 @@ import { ROUTES } from "@/lib/constants";
 
 export type FeedbackResult = { ok: true } | { ok: false; error: string };
 
+/** Mentor (or admin) marks a submitted report as reviewed. */
+export async function markReportReviewed(
+  reportId: string,
+): Promise<FeedbackResult> {
+  const user = await getCurrentUser();
+  if (!user || user.role === "intern") {
+    return { ok: false, error: "You don't have permission to review reports." };
+  }
+
+  await getDataSource().markReportReviewed(reportId);
+
+  revalidatePath(ROUTES.report(reportId));
+  revalidatePath(ROUTES.dashboard);
+  return { ok: true };
+}
+
 export async function submitFeedback(
   reportId: string,
   input: unknown,

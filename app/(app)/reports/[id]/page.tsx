@@ -1,6 +1,6 @@
 import type { Metadata } from "next";
 import { notFound } from "next/navigation";
-import { Pencil } from "lucide-react";
+import { Pencil, NotebookText } from "lucide-react";
 import { getCurrentUser } from "@/lib/session";
 import { getDataSource } from "@/services";
 import { PageContainer } from "@/components/shared/page-container";
@@ -9,7 +9,7 @@ import { Badge } from "@/components/ui/badge";
 import { LinkButton } from "@/components/shared/link-button";
 import { Reveal } from "@/components/shared/motion";
 import { ReportView } from "@/features/reports/components/report-view";
-import { MentorFeedbackForm } from "@/features/reports/components/mentor-feedback-form";
+import { MentorReviewPanel } from "@/features/reports/components/mentor-review-panel";
 import { ReportSuccess } from "@/features/weekly-report/components/report-success";
 import { REPORT_STATUS_LABELS } from "@/lib/domain";
 import { formatDate } from "@/lib/format";
@@ -42,7 +42,7 @@ export default async function ReportDetailPage({
   const allowed = user.role === "admin" || isOwner || isMentor;
   if (!allowed) notFound();
 
-  const canGiveFeedback =
+  const canReview =
     !isOwner &&
     (isMentor || user.role === "admin") &&
     report.status === "submitted";
@@ -83,6 +83,16 @@ export default async function ReportDetailPage({
               <Badge variant={isDraft ? "outline" : "secondary"}>
                 {REPORT_STATUS_LABELS[report.status]}
               </Badge>
+              {!isOwner ? (
+                <LinkButton
+                  href={ROUTES.intern(internship.id)}
+                  variant="outline"
+                  size="sm"
+                >
+                  <NotebookText />
+                  All weeks
+                </LinkButton>
+              ) : null}
               {isDraft && isOwner ? (
                 <LinkButton href={ROUTES.editReport(report.id)} size="sm">
                   <Pencil />
@@ -95,20 +105,12 @@ export default async function ReportDetailPage({
       </Reveal>
       <Reveal delay={0.05}>
         <div className="mt-8 space-y-6">
-          <ReportView
-            report={report}
-            lookups={lookups}
-            showFeedback={!canGiveFeedback}
-          />
-          {canGiveFeedback ? (
-            <MentorFeedbackForm
+          <ReportView report={report} lookups={lookups} showFeedback />
+          {canReview ? (
+            <MentorReviewPanel
               reportId={report.id}
               internName={intern?.fullName ?? "your intern"}
-              initial={{
-                feedback: report.feedback?.feedback ?? "",
-                nextGoal: report.feedback?.nextGoal ?? "",
-                rating: report.feedback?.rating ?? null,
-              }}
+              reviewedAt={report.reviewedAt}
             />
           ) : null}
         </div>

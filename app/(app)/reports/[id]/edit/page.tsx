@@ -29,7 +29,6 @@ export default async function EditReportPage({
   if (report.status === "submitted") redirect(ROUTES.report(id));
 
   const lookups = await db.getLookups();
-  const skillIds = lookups.skills.map((s) => s.id);
 
   return (
     <ReportWizard
@@ -47,8 +46,7 @@ export default async function EditReportPage({
           endDate: report.endDate,
         }),
       }}
-      initialValues={formValuesFromReport(report, skillIds)}
-      skills={lookups.skills.map((s) => ({ id: s.id, name: s.name }))}
+      initialValues={formValuesFromReport(report)}
       categories={lookups.learningCategories.map((c) => ({
         id: c.id,
         name: c.name,

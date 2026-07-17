@@ -62,6 +62,28 @@ export function metricTrend(
     .map((d) => ({ label: `W${d.weekNumber}`, value: d[key] as number }));
 }
 
+/** Frequency of AI-extracted skills across submitted reports (most first). */
+export function skillFrequency(details: WeeklyReportDetail[]): SeriesPoint[] {
+  const map = new Map<string, number>();
+  for (const d of submittedAsc(details))
+    for (const s of d.intelligence?.skills ?? [])
+      map.set(s.name, (map.get(s.name) ?? 0) + 1);
+  return [...map]
+    .map(([label, value]) => ({ label, value }))
+    .sort((a, b) => b.value - a.value);
+}
+
+/** Frequency of AI-extracted concepts across submitted reports (most first). */
+export function conceptFrequency(details: WeeklyReportDetail[]): SeriesPoint[] {
+  const map = new Map<string, number>();
+  for (const d of submittedAsc(details))
+    for (const c of d.intelligence?.concepts ?? [])
+      map.set(c.name, (map.get(c.name) ?? 0) + 1);
+  return [...map]
+    .map(([label, value]) => ({ label, value }))
+    .sort((a, b) => b.value - a.value);
+}
+
 export function totalLearnings(details: WeeklyReportDetail[]): number {
   return submittedAsc(details).reduce(
     (sum, d) => sum + d.learningLogs.length,

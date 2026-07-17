@@ -144,6 +144,7 @@ export interface WeeklyReportRow {
   working_hours: number | null;
   status: ReportStatus;
   submitted_at: string | null;
+  reviewed_at: string | null;
   created_at: string;
   updated_at: string;
   deleted_at: string | null;

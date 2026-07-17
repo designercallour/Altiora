@@ -1,31 +1,18 @@
 import type { ReportFormValues } from "@/schemas/weekly-report";
 import type { WeeklyReportDetail } from "@/types/domain";
 
-const DEFAULT_SCALE = 3;
-const DEFAULT_SLIDER = 7;
-
-/**
- * A fresh report form. Skill ratings are pre-seeded from the intern's previous
- * week when available (continuity + less effort + meaningful week-over-week
- * deltas), falling back to a neutral 3.
- */
-export function defaultFormValues(
-  skillIds: string[],
-  priorScores?: Map<string, number>,
-): ReportFormValues {
+/** A fresh, empty report form. */
+export function defaultFormValues(): ReportFormValues {
   return {
     mood: null,
-    satisfaction: DEFAULT_SLIDER,
+    satisfaction: null,
     achievement: "",
     challenge: "",
     solution: "",
     mentorHelp: "",
-    confidence: DEFAULT_SLIDER,
+    confidence: null,
     workingHours: null,
-    skillScores: skillIds.map((skillId) => ({
-      skillId,
-      score: priorScores?.get(skillId) ?? DEFAULT_SCALE,
-    })),
+    skillScores: [],
     learningLogs: [],
   };
 }
@@ -33,23 +20,19 @@ export function defaultFormValues(
 /** Hydrate the form from an existing (draft) report. */
 export function formValuesFromReport(
   report: WeeklyReportDetail,
-  skillIds: string[],
 ): ReportFormValues {
-  const scoreBySkill = new Map(
-    report.skillScores.map((s) => [s.skillId, s.score]),
-  );
   return {
     mood: report.mood,
-    satisfaction: report.satisfaction ?? DEFAULT_SLIDER,
+    satisfaction: report.satisfaction,
     achievement: report.achievement ?? "",
     challenge: report.challenge ?? "",
     solution: report.solution ?? "",
     mentorHelp: report.mentorHelp ?? "",
-    confidence: report.confidence ?? DEFAULT_SLIDER,
+    confidence: report.confidence,
     workingHours: report.workingHours,
-    skillScores: skillIds.map((skillId) => ({
-      skillId,
-      score: scoreBySkill.get(skillId) ?? DEFAULT_SCALE,
+    skillScores: report.skillScores.map((s) => ({
+      skillId: s.skillId,
+      score: s.score,
     })),
     learningLogs: report.learningLogs.map((l) => ({
       id: l.id,

@@ -14,6 +14,7 @@ import type {
   AppUser,
   Internship,
   InternSummary,
+  LearningIntelligence,
   Lookups,
   MentorFeedback,
   ReportStatus,
@@ -116,6 +117,17 @@ export interface DataSource {
   updateReport(id: string, patch: ReportUpdate): Promise<WeeklyReportDetail>;
   submitReport(id: string): Promise<WeeklyReportDetail>;
   deleteReport(id: string): Promise<void>;
+
+  // Mentor review --------------------------------------------------------------
+  /** Mark a submitted report as reviewed by its mentor (idempotent). */
+  markReportReviewed(id: string): Promise<WeeklyReportDetail>;
+
+  // Learning intelligence ------------------------------------------------------
+  /** Persist the AI-extracted learning signal for a report (upsert). */
+  saveReportIntelligence(
+    reportId: string,
+    intelligence: LearningIntelligence,
+  ): Promise<void>;
 
   // Mentor feedback ------------------------------------------------------------
   upsertFeedback(

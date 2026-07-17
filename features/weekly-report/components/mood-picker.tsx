@@ -2,10 +2,34 @@
 
 import * as React from "react";
 import { motion, useReducedMotion } from "framer-motion";
+import {
+  Tooltip,
+  TooltipContent,
+  TooltipTrigger,
+} from "@/components/ui/tooltip";
 import { MOOD_SCALE } from "@/lib/domain";
 import { cn } from "@/lib/utils";
 
-/** Emoji mood selector. Renders best → worst; stores the ordinal value. */
+/**
+ * Per-mood colour: values 1–3 lean red (overwhelmed → neutral), 4–6 lean green
+ * (okay → great). Intensity grows toward the extremes — the further from the
+ * middle, the more saturated. Uses semantic tokens so it stays on-brand + works
+ * in dark mode.
+ */
+function moodColor(value: number) {
+  const base = value >= 4 ? "var(--success)" : "var(--destructive)";
+  const dist = Math.min(1, Math.abs(value - 3.5) / 2.5); // 0.2 · 0.6 · 1.0
+  const strength = Math.round((0.5 + dist * 0.5) * 100); // 60 · 80 · 100
+  // Fill intensity grows toward the extremes: the selected 😭 is the reddest,
+  // the selected 😀 the greenest.
+  const bg = Math.round(14 + dist * 24); // 19 · 28 · 38
+  return {
+    border: `color-mix(in oklch, ${base} ${strength}%, var(--border))`,
+    bgActive: `color-mix(in oklch, ${base} ${bg}%, transparent)`,
+  };
+}
+
+/** Emoji mood selector. Left = overwhelmed → right = great; stores the value. */
 export function MoodPicker({
   value,
   onChange,
@@ -14,7 +38,6 @@ export function MoodPicker({
   onChange: (value: number) => void;
 }) {
   const reduce = useReducedMotion();
-  const ordered = [...MOOD_SCALE].reverse(); // 😀 great → 😭 overwhelmed
   const selected = MOOD_SCALE.find((m) => m.value === value);
 
   return (
@@ -24,31 +47,44 @@ export function MoodPicker({
         aria-label="How did your week feel?"
         className="grid grid-cols-6 gap-2"
       >
-        {ordered.map((m) => {
+        {MOOD_SCALE.map((m) => {
           const active = value === m.value;
+          const c = moodColor(m.value);
           return (
-            <button
-              key={m.value}
-              type="button"
-              role="radio"
-              aria-checked={active}
-              aria-label={m.label}
-              onClick={() => onChange(m.value)}
-              className={cn(
-                "focus-visible:ring-ring/50 group flex aspect-square flex-col items-center justify-center rounded-xl border transition-colors outline-none focus-visible:ring-2",
-                active
-                  ? "border-primary bg-primary/8"
-                  : "border-border hover:border-primary/40 hover:bg-accent/50",
-              )}
-            >
-              <motion.span
-                className="text-2xl sm:text-3xl"
-                animate={reduce ? undefined : { scale: active ? 1.12 : 1 }}
-                transition={{ type: "spring", stiffness: 400, damping: 18 }}
+            <Tooltip key={m.value}>
+              <TooltipTrigger
+                render={
+                  <button
+                    type="button"
+                    role="radio"
+                    aria-checked={active}
+                    aria-label={m.label}
+                    onClick={() => onChange(m.value)}
+                    style={
+                      {
+                        "--mood": c.border,
+                        backgroundColor: active ? c.bgActive : undefined,
+                      } as React.CSSProperties
+                    }
+                    className={cn(
+                      "focus-visible:ring-ring/50 group flex aspect-square flex-col items-center justify-center rounded-xl border transition-colors outline-none focus-visible:ring-2",
+                      active
+                        ? "border-[color:var(--mood)]"
+                        : "border-border hover:border-[color:var(--mood)]",
+                    )}
+                  />
+                }
               >
-                {m.emoji}
-              </motion.span>
-            </button>
+                <motion.span
+                  className="text-2xl sm:text-3xl"
+                  animate={reduce ? undefined : { scale: active ? 1.12 : 1 }}
+                  transition={{ type: "spring", stiffness: 400, damping: 18 }}
+                >
+                  {m.emoji}
+                </motion.span>
+              </TooltipTrigger>
+              <TooltipContent>{m.label}</TooltipContent>
+            </Tooltip>
           );
         })}
       </div>

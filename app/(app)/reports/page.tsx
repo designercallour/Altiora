@@ -155,8 +155,7 @@ function ReportRow({ report }: { report: WeeklyReport }) {
             </span>
           </p>
           <p className="text-muted-foreground text-xs">
-            Satisfaction {report.satisfaction ?? "–"}/10 · Confidence{" "}
-            {report.confidence ?? "–"}/10
+            Confidence {report.confidence ?? "–"}/10
           </p>
         </div>
         <Badge variant={report.status === "draft" ? "outline" : "secondary"}>
