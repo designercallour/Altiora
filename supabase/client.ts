@@ -1,0 +1,12 @@
+import { createBrowserClient } from "@supabase/ssr";
+
+/**
+ * Browser Supabase client. Only used when NEXT_PUBLIC_DATA_SOURCE=supabase.
+ * Reads public env vars that are inlined at build time.
+ */
+export function createClient() {
+  return createBrowserClient(
+    process.env.NEXT_PUBLIC_SUPABASE_URL!,
+    process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY!,
+  );
+}
