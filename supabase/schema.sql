@@ -243,6 +243,7 @@ create table if not exists public.weekly_reports (
   working_hours numeric(5, 1) check (working_hours >= 0),
   status        report_status not null default 'draft',
   submitted_at  timestamptz,
+  reviewed_at   timestamptz,                                                     -- set when the mentor marks it reviewed
   created_at    timestamptz not null default now(),
   updated_at    timestamptz not null default now(),
   deleted_at    timestamptz
@@ -305,6 +306,18 @@ create unique index if not exists mentor_feedback_report_key
   on public.mentor_feedback (report_id) where deleted_at is null;
 create index if not exists mentor_feedback_mentor_idx on public.mentor_feedback (mentor_id);
 
+-- AI-extracted learning intelligence — one per report.
+create table if not exists public.report_intelligence (
+  report_id          uuid primary key references public.weekly_reports (id) on delete cascade,
+  summary            text,
+  learning_direction text[]  not null default '{}',
+  recommended_topics text[]  not null default '{}',
+  skills             jsonb   not null default '[]',   -- [{name,confidence,learningStatus,importance,evidence}]
+  concepts           jsonb   not null default '[]',   -- [{name,relatedSkill}]
+  created_at         timestamptz not null default now(),
+  updated_at         timestamptz not null default now()
+);
+
 -- ----------------------------------------------------------------------------
 -- updated_at triggers
 -- ----------------------------------------------------------------------------
@@ -314,7 +327,8 @@ declare
   tables text[] := array[
     'departments','teams','cohorts','projects','skill_categories','skills',
     'learning_categories','learning_sources','users','internships',
-    'weekly_reports','weekly_skill_scores','learning_logs','mentor_feedback'
+    'weekly_reports','weekly_skill_scores','learning_logs','mentor_feedback',
+    'report_intelligence'
   ];
 begin
   foreach t in array tables loop
@@ -351,7 +365,8 @@ declare t text;
   tables text[] := array[
     'departments','teams','cohorts','projects','skill_categories','skills',
     'learning_categories','learning_sources','users','internships',
-    'weekly_reports','weekly_skill_scores','learning_logs','mentor_feedback'
+    'weekly_reports','weekly_skill_scores','learning_logs','mentor_feedback',
+    'report_intelligence'
   ];
 begin
   foreach t in array tables loop
@@ -418,10 +433,11 @@ create policy "internships_mentor_select" on public.internships for select
   using (mentor_id = public.current_app_user_id());
 
 -- weekly_reports --------------------------------------------------------------
-drop policy if exists "wr_admin_all"     on public.weekly_reports;
-drop policy if exists "wr_intern_select" on public.weekly_reports;
-drop policy if exists "wr_intern_write"  on public.weekly_reports;
-drop policy if exists "wr_mentor_select" on public.weekly_reports;
+drop policy if exists "wr_admin_all"      on public.weekly_reports;
+drop policy if exists "wr_intern_select"  on public.weekly_reports;
+drop policy if exists "wr_intern_write"   on public.weekly_reports;
+drop policy if exists "wr_mentor_select"  on public.weekly_reports;
+drop policy if exists "wr_mentor_review"  on public.weekly_reports;
 
 create policy "wr_admin_all" on public.weekly_reports for all
   using (public.is_admin()) with check (public.is_admin());
@@ -448,6 +464,19 @@ create policy "wr_intern_write" on public.weekly_reports for all
 
 create policy "wr_mentor_select" on public.weekly_reports for select
   using (exists (
+    select 1 from public.internships i
+    where i.id = weekly_reports.internship_id
+      and i.mentor_id = public.current_app_user_id()
+  ));
+
+-- Mentors may mark their interns' submitted reports as reviewed (reviewed_at).
+create policy "wr_mentor_review" on public.weekly_reports for update
+  using (exists (
+    select 1 from public.internships i
+    where i.id = weekly_reports.internship_id
+      and i.mentor_id = public.current_app_user_id()
+  ))
+  with check (exists (
     select 1 from public.internships i
     where i.id = weekly_reports.internship_id
       and i.mentor_id = public.current_app_user_id()
@@ -518,6 +547,22 @@ create policy "mf_intern_select" on public.mentor_feedback for select
 create policy "mf_mentor_write" on public.mentor_feedback for all
   using (public.mentors_report(report_id))
   with check (public.mentors_report(report_id));
+
+-- report_intelligence -----------------------------------------------------------
+drop policy if exists "ri_admin_all"     on public.report_intelligence;
+drop policy if exists "ri_intern_write"  on public.report_intelligence;
+drop policy if exists "ri_mentor_select" on public.report_intelligence;
+
+create policy "ri_admin_all" on public.report_intelligence for all
+  using (public.is_admin()) with check (public.is_admin());
+
+-- Interns own the extraction for their own reports (created at submit time).
+create policy "ri_intern_write" on public.report_intelligence for all
+  using (public.owns_report(report_id))
+  with check (public.owns_report(report_id));
+
+create policy "ri_mentor_select" on public.report_intelligence for select
+  using (public.mentors_report(report_id));
 
 -- ============================================================================
 -- AUTH INTEGRATION

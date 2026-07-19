@@ -1,14 +1,6 @@
 import Link from "next/link";
 import { format } from "date-fns";
-import {
-  ArrowRight,
-  BookOpen,
-  Flame,
-  NotebookPen,
-  Sparkles,
-  MessageSquareQuote,
-  TrendingUp,
-} from "lucide-react";
+import { ArrowRight, BookOpen, NotebookPen, Sparkles } from "lucide-react";
 import { getDataSource } from "@/services";
 import { weekRange } from "@/lib/week";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
@@ -22,13 +14,10 @@ import { BarList } from "@/components/shared/bar-list";
 import { LinkButton } from "@/components/shared/link-button";
 import { Reveal, Stagger, StaggerItem } from "@/components/shared/motion";
 import { TrendChart } from "@/components/charts/trend-chart";
-import { SkillRadar } from "@/components/charts/skill-radar";
 import {
-  computeStreak,
-  countBy,
-  latestSkillScores,
   metricTrend,
   reportAverages,
+  skillFrequency,
   submittedAsc,
   totalLearnings,
 } from "@/lib/insights";
@@ -68,10 +57,7 @@ export async function InternDashboard({ user }: { user: AppUser }) {
     );
   }
 
-  const [details, lookups] = await Promise.all([
-    db.listReportDetails({ internshipId: internship.id }),
-    db.getLookups(),
-  ]);
+  const details = await db.listReportDetails({ internshipId: internship.id });
 
   const submitted = submittedAsc(details);
   const cw = weekRange(now);
@@ -80,29 +66,16 @@ export async function InternDashboard({ user }: { user: AppUser }) {
   );
   const reflectedThisWeek = current?.status === "submitted";
 
-  const streak = computeStreak(details);
   const averages = reportAverages(details);
   const learnings = totalLearnings(details);
 
-  const confidenceTrend = metricTrend(details, "confidence");
   const moodTrend = metricTrend(details, "mood");
-  const latest = latestSkillScores(details);
-  const radar = lookups.skills
-    .filter((s) => latest.has(s.id))
-    .map((s) => ({ skill: s.name, value: latest.get(s.id) ?? 0 }));
-
-  const catNameById = new Map(
-    lookups.learningCategories.map((c) => [c.id, c.name]),
+  const moodMeta = moodLevel(
+    averages.mood != null ? Math.round(averages.mood) : null,
   );
-  const allLogs = submitted.flatMap((d) => d.learningLogs);
-  const byCategory = [...countBy(allLogs, (l) => l.learningCategoryId)]
-    .map(([id, value]) => ({ label: catNameById.get(id) ?? "Other", value }))
-    .sort((a, b) => b.value - a.value)
-    .slice(0, 6);
 
-  const feedbackReport = [...submitted]
-    .reverse()
-    .find((d) => d.feedback?.feedback);
+  const bySkill = skillFrequency(details).slice(0, 6);
+
   const recent = [...submitted].reverse().slice(0, 4);
 
   return (
@@ -117,17 +90,12 @@ export async function InternDashboard({ user }: { user: AppUser }) {
               : "A calm space to reflect on your week and watch your growth take shape."
           }
           actions={
-            <LinkButton
-              href={
-                reflectedThisWeek && current
-                  ? ROUTES.report(current.id)
-                  : ROUTES.newReport
-              }
-              variant={reflectedThisWeek ? "outline" : "default"}
-            >
-              <NotebookPen />
-              {reflectedThisWeek ? "View this week" : "Start weekly report"}
-            </LinkButton>
+            reflectedThisWeek && current ? (
+              <LinkButton href={ROUTES.report(current.id)} variant="outline">
+                <NotebookPen />
+                View this week
+              </LinkButton>
+            ) : undefined
           }
         />
       </Reveal>
@@ -162,15 +130,7 @@ export async function InternDashboard({ user }: { user: AppUser }) {
       ) : null}
 
       {/* Stats */}
-      <Stagger className="mt-6 grid grid-cols-2 gap-4 lg:grid-cols-4">
-        <StaggerItem>
-          <StatCard
-            label="Current streak"
-            value={streak > 0 ? `${streak} wk` : "—"}
-            icon={Flame}
-            hint={streak > 0 ? "Consecutive weeks" : "Reflect to begin"}
-          />
-        </StaggerItem>
+      <Stagger className="mt-6 grid grid-cols-2 gap-4 lg:grid-cols-3">
         <StaggerItem>
           <StatCard
             label="Reflections"
@@ -189,12 +149,18 @@ export async function InternDashboard({ user }: { user: AppUser }) {
         </StaggerItem>
         <StaggerItem>
           <StatCard
-            label="Avg. confidence"
+            label="Avg. mood"
             value={
-              averages.confidence != null ? round1(averages.confidence) : "—"
+              averages.mood != null && moodMeta
+                ? `${moodMeta.emoji} ${moodMeta.label}`
+                : "—"
             }
-            icon={TrendingUp}
-            hint="Out of 10"
+            icon={Sparkles}
+            hint={
+              averages.mood != null
+                ? `${round1(averages.mood)} / 6 · across your weeks`
+                : "Across your weeks"
+            }
           />
         </StaggerItem>
       </Stagger>
@@ -210,8 +176,8 @@ export async function InternDashboard({ user }: { user: AppUser }) {
             >
               <p className="text-muted-foreground">
                 Once you submit your first weekly report, this space fills with
-                your confidence trend, skill growth, and the learnings you
-                capture — a living picture of how you&rsquo;re growing.
+                your mood trend and the learnings you capture — a living picture
+                of how you&rsquo;re growing.
               </p>
             </InsightCard>
           </div>
@@ -219,34 +185,7 @@ export async function InternDashboard({ user }: { user: AppUser }) {
       ) : (
         <>
           {/* Growth charts */}
-          <div className="mt-6 grid grid-cols-1 gap-4 lg:grid-cols-5">
-            <Reveal delay={0.05} className="lg:col-span-3">
-              <Card className="h-full">
-                <CardHeader>
-                  <CardTitle>Confidence over time</CardTitle>
-                </CardHeader>
-                <CardContent>
-                  <TrendChart
-                    data={confidenceTrend}
-                    yDomain={[0, 10]}
-                    color="var(--chart-1)"
-                  />
-                </CardContent>
-              </Card>
-            </Reveal>
-            <Reveal delay={0.1} className="lg:col-span-2">
-              <Card className="h-full">
-                <CardHeader>
-                  <CardTitle>Skill self-assessment</CardTitle>
-                </CardHeader>
-                <CardContent>
-                  <SkillRadar data={radar} />
-                </CardContent>
-              </Card>
-            </Reveal>
-          </div>
-
-          <div className="mt-4 grid grid-cols-1 gap-4 lg:grid-cols-2">
+          <div className="mt-6 grid grid-cols-1 gap-4 lg:grid-cols-2">
             <Reveal delay={0.05}>
               <Card className="h-full">
                 <CardHeader>
@@ -257,6 +196,7 @@ export async function InternDashboard({ user }: { user: AppUser }) {
                     data={moodTrend}
                     yDomain={[1, 6]}
                     color="var(--chart-3)"
+                    mood
                   />
                 </CardContent>
               </Card>
@@ -265,58 +205,21 @@ export async function InternDashboard({ user }: { user: AppUser }) {
               <Card className="h-full">
                 <CardHeader>
                   <CardTitle>What you&rsquo;re learning</CardTitle>
+                  <p className="text-muted-foreground text-sm">
+                    Skills Altiora detected in your reflections
+                  </p>
                 </CardHeader>
                 <CardContent>
-                  <BarList items={byCategory} emptyLabel="No learnings yet" />
+                  <BarList
+                    items={bySkill}
+                    emptyLabel="Skills appear as you reflect"
+                  />
                 </CardContent>
               </Card>
             </Reveal>
           </div>
         </>
       )}
-
-      {/* Mentor feedback */}
-      <section className="mt-10 space-y-4">
-        <SectionHeader
-          title="Latest mentor feedback"
-          icon={MessageSquareQuote}
-        />
-        {feedbackReport?.feedback ? (
-          <InsightCard
-            title="From your mentor"
-            description={`On Week ${feedbackReport.weekNumber}`}
-            icon={MessageSquareQuote}
-            tone="primary"
-            footer={
-              <Link
-                href={ROUTES.report(feedbackReport.id)}
-                className="text-primary hover:underline"
-              >
-                View the full reflection →
-              </Link>
-            }
-          >
-            <p className="text-muted-foreground">
-              {feedbackReport.feedback.feedback}
-            </p>
-            {feedbackReport.feedback.nextGoal ? (
-              <p className="mt-3">
-                <span className="text-muted-foreground text-xs font-medium tracking-wide uppercase">
-                  Next goal
-                </span>
-                <br />
-                {feedbackReport.feedback.nextGoal}
-              </p>
-            ) : null}
-          </InsightCard>
-        ) : (
-          <EmptyState
-            icon={MessageSquareQuote}
-            title="No feedback yet"
-            description="When your mentor reviews a report, their guidance and next goal appear here."
-          />
-        )}
-      </section>
 
       {/* Recent reports */}
       {recent.length > 0 ? (
@@ -352,8 +255,7 @@ export async function InternDashboard({ user }: { user: AppUser }) {
                         </span>
                       </p>
                       <p className="text-muted-foreground text-xs">
-                        {r.learningLogs.length} learnings · confidence{" "}
-                        {r.confidence ?? "–"}/10
+                        {r.learningLogs.length} learnings
                       </p>
                     </div>
                     <ArrowRight className="text-muted-foreground size-4 transition-transform group-hover:translate-x-0.5" />

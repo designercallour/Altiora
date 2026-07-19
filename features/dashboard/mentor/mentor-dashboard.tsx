@@ -1,11 +1,4 @@
-import Link from "next/link";
-import {
-  ArrowRight,
-  CheckCircle2,
-  Clock,
-  MessageSquareQuote,
-  Users,
-} from "lucide-react";
+import { CheckCircle2, Clock, MessageSquareQuote, Users } from "lucide-react";
 import { getDataSource } from "@/services";
 import { weekRangeFrom } from "@/lib/week";
 import { PageContainer } from "@/components/shared/page-container";
@@ -14,12 +7,9 @@ import { SectionHeader } from "@/components/shared/section-header";
 import { StatCard } from "@/components/shared/stat-card";
 import { EmptyState } from "@/components/shared/empty-state";
 import { Reveal, Stagger, StaggerItem } from "@/components/shared/motion";
-import { Avatar, AvatarFallback } from "@/components/ui/avatar";
-import { Badge } from "@/components/ui/badge";
-import { moodLevel } from "@/lib/domain";
-import { getInitials } from "@/lib/format";
 import { ROUTES } from "@/lib/constants";
 import type { AppUser, InternSummary } from "@/types/domain";
+import { InternRow } from "../intern-row";
 
 function reflectedInWeek(
   s: InternSummary,
@@ -52,21 +42,26 @@ export async function MentorDashboard({ user }: { user: AppUser }) {
       <Reveal>
         <PageHeader
           eyebrow="Mentor"
-          title={`Coaching ${interns.length} ${interns.length === 1 ? "intern" : "interns"}`}
-          description="Where your interns need you this week — feedback to give, reflections to read, growth to notice."
+          title={`Mentoring ${interns.length} ${interns.length === 1 ? "intern" : "interns"}`}
+          description="Where your interns need you this week — reflections to review and growth to notice."
         />
       </Reveal>
 
       <Stagger className="mt-8 grid grid-cols-2 gap-4 lg:grid-cols-4">
         <StaggerItem>
-          <StatCard label="Your interns" value={interns.length} icon={Users} />
+          <StatCard
+            label="Your interns"
+            value={interns.length}
+            icon={Users}
+            hint="Assigned to you"
+          />
         </StaggerItem>
         <StaggerItem>
           <StatCard
-            label="Needs feedback"
+            label="To review"
             value={needsFeedback.length}
             icon={MessageSquareQuote}
-            hint="Submitted, awaiting your notes"
+            hint="Submitted, awaiting your review"
           />
         </StaggerItem>
         <StaggerItem>
@@ -90,15 +85,15 @@ export async function MentorDashboard({ user }: { user: AppUser }) {
       {/* Feedback queue */}
       <section className="mt-10 space-y-4">
         <SectionHeader
-          title="Needs your feedback"
-          description="Reflections your interns have submitted and are waiting to hear back on"
+          title="To review"
+          description="Reflections your interns have submitted and are waiting for you to read"
           icon={MessageSquareQuote}
         />
         {needsFeedback.length === 0 ? (
           <EmptyState
             icon={CheckCircle2}
             title="You're all caught up"
-            description="Every submitted reflection has your feedback. Beautifully done."
+            description="Every submitted reflection has been reviewed. Beautifully done."
           />
         ) : (
           <ul className="space-y-2">
@@ -107,8 +102,8 @@ export async function MentorDashboard({ user }: { user: AppUser }) {
                 key={s.user.id}
                 summary={s}
                 href={
-                  s.latestReport
-                    ? ROUTES.report(s.latestReport.id)
+                  s.internship
+                    ? ROUTES.intern(s.internship.id)
                     : ROUTES.dashboard
                 }
                 cta="Review"
@@ -133,8 +128,8 @@ export async function MentorDashboard({ user }: { user: AppUser }) {
                 key={s.user.id}
                 summary={s}
                 href={
-                  s.latestReport
-                    ? ROUTES.report(s.latestReport.id)
+                  s.internship
+                    ? ROUTES.intern(s.internship.id)
                     : ROUTES.dashboard
                 }
               />
@@ -144,77 +139,28 @@ export async function MentorDashboard({ user }: { user: AppUser }) {
       ) : null}
 
       {/* Roster */}
-      <section className="mt-10 space-y-4">
-        <SectionHeader
-          title="Your interns"
-          description="Everyone you're supporting"
-          icon={Users}
-        />
-        <ul className="space-y-2">
-          {interns.map((s) => (
-            <InternRow
-              key={s.user.id}
-              summary={s}
-              href={
-                s.latestReport
-                  ? ROUTES.report(s.latestReport.id)
-                  : ROUTES.dashboard
-              }
-            />
-          ))}
-        </ul>
-      </section>
+      {interns.length > 0 ? (
+        <section className="mt-10 space-y-4">
+          <SectionHeader
+            title="Your interns"
+            description="Open anyone to see their full week-by-week history"
+            icon={Users}
+          />
+          <ul className="space-y-2">
+            {interns.map((s) => (
+              <InternRow
+                key={s.user.id}
+                summary={s}
+                href={
+                  s.internship
+                    ? ROUTES.intern(s.internship.id)
+                    : ROUTES.dashboard
+                }
+              />
+            ))}
+          </ul>
+        </section>
+      ) : null}
     </PageContainer>
-  );
-}
-
-function InternRow({
-  summary,
-  href,
-  cta,
-  accent,
-}: {
-  summary: InternSummary;
-  href: string;
-  cta?: string;
-  accent?: boolean;
-}) {
-  const mood = moodLevel(summary.latestReport?.mood ?? null);
-  return (
-    <li>
-      <Link
-        href={href}
-        className={
-          "group border-border bg-card hover:border-primary/30 focus-visible:ring-ring/50 flex items-center gap-3 rounded-xl border p-3.5 transition-colors outline-none focus-visible:ring-2 " +
-          (accent ? "border-primary/25" : "")
-        }
-      >
-        <Avatar>
-          <AvatarFallback>{getInitials(summary.user.fullName)}</AvatarFallback>
-        </Avatar>
-        <div className="min-w-0 flex-1">
-          <p className="truncate text-sm font-medium">
-            {summary.user.fullName}
-          </p>
-          <p className="text-muted-foreground truncate text-xs">
-            {summary.cohort?.name ?? "—"} · {summary.department?.name ?? "—"} ·{" "}
-            {summary.submittedCount} reflections
-          </p>
-        </div>
-        {mood ? (
-          <span className="text-xl" title={mood.label}>
-            {mood.emoji}
-          </span>
-        ) : null}
-        {cta ? (
-          <Badge variant="default" className="gap-1">
-            {cta}
-            <ArrowRight className="size-3" />
-          </Badge>
-        ) : (
-          <ArrowRight className="text-muted-foreground size-4 transition-transform group-hover:translate-x-0.5" />
-        )}
-      </Link>
-    </li>
   );
 }

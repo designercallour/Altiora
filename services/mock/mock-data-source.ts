@@ -10,6 +10,7 @@ import type {
   AppUser,
   Internship,
   InternSummary,
+  LearningIntelligence,
   Lookups,
   MentorFeedback,
   UserRole,
@@ -63,6 +64,9 @@ export class MockDataSource implements DataSource {
         this.db.feedback.find(
           (f) => f.reportId === report.id && f.deletedAt == null,
         ) ?? null,
+      intelligence:
+        this.db.intelligence.find((x) => x.reportId === report.id)?.data ??
+        null,
     };
   }
 
@@ -89,12 +93,7 @@ export class MockDataSource implements DataSource {
           .sort(byWeekDesc)
       : [];
     const submitted = reports.filter((r) => r.status === "submitted");
-    const needsReview = submitted.some(
-      (r) =>
-        !this.db.feedback.some(
-          (f) => f.reportId === r.id && f.deletedAt == null,
-        ),
-    );
+    const needsReview = submitted.some((r) => r.reviewedAt == null);
 
     return {
       user: intern,
@@ -289,6 +288,7 @@ export class MockDataSource implements DataSource {
       workingHours: input.workingHours,
       status: "draft",
       submittedAt: null,
+      reviewedAt: null,
       createdAt: now,
       updatedAt: now,
       deletedAt: null,
@@ -342,6 +342,27 @@ export class MockDataSource implements DataSource {
     report.submittedAt = nowIso();
     report.updatedAt = report.submittedAt;
     return clone(this.hydrate(report));
+  }
+
+  async markReportReviewed(id: string): Promise<WeeklyReportDetail> {
+    const report = this.activeReports().find((r) => r.id === id);
+    if (!report) throw new Error(`Report ${id} not found.`);
+    if (report.reviewedAt == null) {
+      report.reviewedAt = nowIso();
+      report.updatedAt = report.reviewedAt;
+    }
+    return clone(this.hydrate(report));
+  }
+
+  async saveReportIntelligence(
+    reportId: string,
+    intelligence: LearningIntelligence,
+  ): Promise<void> {
+    const existing = this.db.intelligence.find(
+      (x) => x.reportId === reportId,
+    );
+    if (existing) existing.data = intelligence;
+    else this.db.intelligence.push({ reportId, data: intelligence });
   }
 
   async deleteReport(id: string): Promise<void> {

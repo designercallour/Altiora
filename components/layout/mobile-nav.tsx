@@ -15,7 +15,7 @@ import { Brand } from "./brand";
 import { NavList } from "./nav-list";
 import { SearchTrigger } from "./search-trigger";
 import { UserMenu } from "./user-menu";
-import { PRIMARY_NAV, SECONDARY_NAV } from "@/lib/nav";
+import { PRIMARY_NAV, SECONDARY_NAV, navFor } from "@/lib/nav";
 import type { AppUser } from "@/types/domain";
 
 export function MobileNav({
@@ -54,7 +54,7 @@ export function MobileNav({
           <SearchTrigger />
         </div>
         <div className="flex-1 overflow-y-auto px-3">
-          <NavList items={PRIMARY_NAV} onNavigate={close} />
+          <NavList items={navFor(PRIMARY_NAV, user.role)} onNavigate={close} />
           <div className="mt-2 border-t pt-2">
             <NavList items={SECONDARY_NAV} onNavigate={close} />
           </div>

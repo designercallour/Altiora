@@ -42,7 +42,6 @@ export default async function NewReportPage() {
   const now = new Date();
   const range = weekRange(now);
   const lookups = await db.getLookups();
-  const skillIds = lookups.skills.map((s) => s.id);
 
   const existing = await db.getReportByWeek(
     internship.id,
@@ -55,24 +54,9 @@ export default async function NewReportPage() {
     redirect(ROUTES.report(existing.id));
   }
 
-  // Seed a brand-new report's skill ratings from last week for continuity.
-  let priorScores: Map<string, number> | undefined;
-  if (!existing) {
-    const [previous] = await db.listReportDetails({
-      internshipId: internship.id,
-      status: "submitted",
-      limit: 1,
-    });
-    if (previous) {
-      priorScores = new Map(
-        previous.skillScores.map((s) => [s.skillId, s.score]),
-      );
-    }
-  }
-
   const initialValues = existing
-    ? formValuesFromReport(existing, skillIds)
-    : defaultFormValues(skillIds, priorScores);
+    ? formValuesFromReport(existing)
+    : defaultFormValues();
 
   return (
     <ReportWizard
@@ -86,7 +70,6 @@ export default async function NewReportPage() {
         label: formatWeekLabel(range),
       }}
       initialValues={initialValues}
-      skills={lookups.skills.map((s) => ({ id: s.id, name: s.name }))}
       categories={lookups.learningCategories.map((c) => ({
         id: c.id,
         name: c.name,

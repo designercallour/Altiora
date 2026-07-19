@@ -4,28 +4,30 @@ import { weekRangeFrom } from "@/lib/week";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { PageContainer } from "@/components/shared/page-container";
 import { PageHeader } from "@/components/shared/page-header";
+import { SectionHeader } from "@/components/shared/section-header";
 import { StatCard } from "@/components/shared/stat-card";
 import { BarList } from "@/components/shared/bar-list";
 import { Reveal, Stagger, StaggerItem } from "@/components/shared/motion";
 import { TrendChart } from "@/components/charts/trend-chart";
+import { InternRow } from "../intern-row";
 import {
   average,
-  countBy,
-  sourceEffectiveness,
+  conceptFrequency,
+  skillFrequency,
   submittedAsc,
   totalLearnings,
 } from "@/lib/insights";
 import { moodLevel } from "@/lib/domain";
 import { round1 } from "@/lib/format";
+import { ROUTES } from "@/lib/constants";
 import type { AppUser } from "@/types/domain";
 
 export async function AdminDashboard({ user: _user }: { user: AppUser }) {
   const db = getDataSource();
-  const [interns, details, internships, lookups] = await Promise.all([
+  const [interns, details, internships] = await Promise.all([
     db.listInterns(),
     db.listReportDetails({}),
     db.listInternships(),
-    db.getLookups(),
   ]);
 
   const submitted = submittedAsc(details);
@@ -52,76 +54,20 @@ export async function AdminDashboard({ user: _user }: { user: AppUser }) {
     : 0;
 
   const avgMood = average(submitted.map((d) => d.mood));
-  const avgSat = average(submitted.map((d) => d.satisfaction));
 
-  // Top skills (avg score across all reflections).
-  const skillVals = new Map<string, number[]>();
-  for (const d of submitted)
-    for (const s of d.skillScores) {
-      const arr = skillVals.get(s.skillId) ?? [];
-      arr.push(s.score);
-      skillVals.set(s.skillId, arr);
-    }
-  const topSkills = lookups.skills
-    .map((s) => {
-      const avg = average(skillVals.get(s.id) ?? []) ?? 0;
-      return { label: s.name, value: round1(avg), display: `${round1(avg)}/5` };
-    })
-    .sort((a, b) => b.value - a.value);
+  // AI-extracted skills + concepts across the program.
+  const topSkills = skillFrequency(details).slice(0, 8);
+  const topConcepts = conceptFrequency(details).slice(0, 8);
 
-  // Learning by category.
-  const catName = new Map(
-    lookups.learningCategories.map((c) => [c.id, c.name]),
-  );
-  const allLogs = submitted.flatMap((d) => d.learningLogs);
-  const byCategory = [...countBy(allLogs, (l) => l.learningCategoryId)]
-    .map(([id, value]) => ({ label: catName.get(id) ?? "Other", value }))
-    .sort((a, b) => b.value - a.value)
-    .slice(0, 8);
-
-  // Source effectiveness (avg impact).
-  const srcName = new Map(lookups.learningSources.map((s) => [s.id, s.name]));
-  const sources = [...sourceEffectiveness(details)]
-    .map(([id, { count, avgImpact }]) => ({
-      label: srcName.get(id) ?? "Other",
-      value: round1(avgImpact),
-      display: `${round1(avgImpact)}/5 · ${count}`,
-    }))
-    .sort((a, b) => b.value - a.value);
-
-  // Cohort comparison (avg confidence).
-  const cohortOfInternship = new Map(
-    internships.map((i) => [i.id, i.cohortId]),
-  );
-  const cohortConf = new Map<string, number[]>();
-  for (const d of submitted) {
-    const cohortId = cohortOfInternship.get(d.internshipId);
-    if (!cohortId || d.confidence == null) continue;
-    const arr = cohortConf.get(cohortId) ?? [];
-    arr.push(d.confidence);
-    cohortConf.set(cohortId, arr);
-  }
-  const cohortName = new Map(lookups.cohorts.map((c) => [c.id, c.name]));
-  const cohorts = [...cohortConf]
-    .map(([id, vals]) => {
-      const avg = average(vals) ?? 0;
-      return {
-        label: cohortName.get(id) ?? "Cohort",
-        value: round1(avg),
-        display: `${round1(avg)}/10`,
-      };
-    })
-    .sort((a, b) => b.value - a.value);
-
-  // Org confidence trend (avg by ISO week number).
+  // Org mood trend (avg by ISO week number).
   const byWeek = new Map<number, number[]>();
   for (const d of submitted)
-    if (d.confidence != null) {
+    if (d.mood != null) {
       const arr = byWeek.get(d.weekNumber) ?? [];
-      arr.push(d.confidence);
+      arr.push(d.mood);
       byWeek.set(d.weekNumber, arr);
     }
-  const confTrend = [...byWeek]
+  const moodTrend = [...byWeek]
     .sort((a, b) => a[0] - b[0])
     .map(([w, vals]) => ({
       label: `W${w}`,
@@ -136,13 +82,18 @@ export async function AdminDashboard({ user: _user }: { user: AppUser }) {
         <PageHeader
           eyebrow="Organization"
           title="Internship intelligence"
-          description="How the program is doing — where interns are growing, what's driving learning, and how cohorts compare."
+          description="How the program is doing — where interns are growing and what's driving learning."
         />
       </Reveal>
 
       <Stagger className="mt-8 grid grid-cols-2 gap-4 lg:grid-cols-4">
         <StaggerItem>
-          <StatCard label="Interns" value={interns.length} icon={Users} />
+          <StatCard
+            label="Interns"
+            value={interns.length}
+            icon={Users}
+            hint="Across the program"
+          />
         </StaggerItem>
         <StaggerItem>
           <StatCard
@@ -156,12 +107,16 @@ export async function AdminDashboard({ user: _user }: { user: AppUser }) {
           <StatCard
             label="Avg. mood"
             value={
-              avgMood != null
-                ? `${moodMeta?.emoji ?? ""} ${round1(avgMood)}`
+              avgMood != null && moodMeta
+                ? `${moodMeta.emoji} ${moodMeta.label}`
                 : "—"
             }
             icon={Sparkles}
-            hint="Across all reflections"
+            hint={
+              avgMood != null
+                ? `${round1(avgMood)} / 6 · all reflections`
+                : "Across all reflections"
+            }
           />
         </StaggerItem>
         <StaggerItem>
@@ -169,78 +124,75 @@ export async function AdminDashboard({ user: _user }: { user: AppUser }) {
             label="Learnings captured"
             value={totalLearnings(details)}
             icon={BookOpen}
-            hint={`Avg satisfaction ${avgSat != null ? round1(avgSat) : "—"}/10`}
+            hint="Across all reflections"
           />
         </StaggerItem>
       </Stagger>
 
-      <div className="mt-6 grid grid-cols-1 gap-4 lg:grid-cols-5">
-        <Reveal delay={0.05} className="lg:col-span-3">
-          <Card className="h-full">
+      <div className="mt-6">
+        <Reveal delay={0.05}>
+          <Card>
             <CardHeader>
-              <CardTitle>Confidence across the program</CardTitle>
+              <CardTitle>Mood across the program</CardTitle>
             </CardHeader>
             <CardContent>
-              <TrendChart data={confTrend} yDomain={[0, 10]} />
-            </CardContent>
-          </Card>
-        </Reveal>
-        <Reveal delay={0.1} className="lg:col-span-2">
-          <Card className="h-full">
-            <CardHeader>
-              <CardTitle>Cohort comparison</CardTitle>
-              <p className="text-muted-foreground text-sm">
-                Average confidence by batch
-              </p>
-            </CardHeader>
-            <CardContent>
-              <BarList items={cohorts} />
+              <TrendChart data={moodTrend} yDomain={[1, 6]} mood />
             </CardContent>
           </Card>
         </Reveal>
       </div>
 
-      <div className="mt-4 grid grid-cols-1 gap-4 lg:grid-cols-3">
+      <div className="mt-4 grid grid-cols-1 gap-4 lg:grid-cols-2">
         <Reveal delay={0.05}>
           <Card className="h-full">
             <CardHeader>
-              <CardTitle>Strongest skills</CardTitle>
+              <CardTitle>Top skills</CardTitle>
               <p className="text-muted-foreground text-sm">
-                Average self-assessment across interns
+                Detected by Altiora across all reflections
               </p>
             </CardHeader>
             <CardContent>
-              <BarList items={topSkills} />
+              <BarList items={topSkills} emptyLabel="No skills detected yet" />
             </CardContent>
           </Card>
         </Reveal>
         <Reveal delay={0.1}>
           <Card className="h-full">
             <CardHeader>
-              <CardTitle>Most effective sources</CardTitle>
+              <CardTitle>Emerging concepts</CardTitle>
               <p className="text-muted-foreground text-sm">
-                By average learning impact
+                Specific tools & techniques interns are picking up
               </p>
             </CardHeader>
             <CardContent>
-              <BarList items={sources} />
-            </CardContent>
-          </Card>
-        </Reveal>
-        <Reveal delay={0.15}>
-          <Card className="h-full">
-            <CardHeader>
-              <CardTitle>Where learning happens</CardTitle>
-              <p className="text-muted-foreground text-sm">
-                Learnings by category
-              </p>
-            </CardHeader>
-            <CardContent>
-              <BarList items={byCategory} />
+              <BarList
+                items={topConcepts}
+                emptyLabel="No concepts detected yet"
+              />
             </CardContent>
           </Card>
         </Reveal>
       </div>
+
+      {/* Interns roster */}
+      <section className="mt-10 space-y-4">
+        <SectionHeader
+          title="Interns"
+          description="Open anyone to see their full week-by-week history"
+          icon={Users}
+        />
+        <ul className="space-y-2">
+          {interns.map((s) => (
+            <InternRow
+              key={s.user.id}
+              summary={s}
+              href={
+                s.internship ? ROUTES.intern(s.internship.id) : ROUTES.dashboard
+              }
+            />
+          ))}
+        </ul>
+      </section>
     </PageContainer>
   );
 }

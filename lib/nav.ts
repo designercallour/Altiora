@@ -1,12 +1,7 @@
 import type { LucideIcon } from "lucide-react";
-import {
-  LayoutDashboard,
-  NotebookPen,
-  Sparkles,
-  MessagesSquare,
-  Settings,
-} from "lucide-react";
+import { LayoutDashboard, NotebookPen, Settings } from "lucide-react";
 import { ROUTES } from "./constants";
+import type { UserRole } from "@/types/domain";
 
 export interface NavItem {
   label: string;
@@ -16,6 +11,13 @@ export interface NavItem {
   badge?: "soon";
   /** Short description, used by the command palette. */
   description?: string;
+  /** Roles that see this item. Omitted = visible to everyone. */
+  roles?: UserRole[];
+}
+
+/** Filter nav items to those visible for a role. */
+export function navFor(items: NavItem[], role: UserRole): NavItem[] {
+  return items.filter((i) => !i.roles || i.roles.includes(role));
 }
 
 export const PRIMARY_NAV: NavItem[] = [
@@ -30,20 +32,7 @@ export const PRIMARY_NAV: NavItem[] = [
     href: ROUTES.reports,
     icon: NotebookPen,
     description: "Reflect on your week",
-  },
-  {
-    label: "Insights",
-    href: ROUTES.insights,
-    icon: Sparkles,
-    badge: "soon",
-    description: "Organizational intelligence",
-  },
-  {
-    label: "Feedback",
-    href: ROUTES.feedback,
-    icon: MessagesSquare,
-    badge: "soon",
-    description: "Mentor feedback & growth",
+    roles: ["intern"],
   },
 ];
 

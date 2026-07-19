@@ -16,8 +16,6 @@ import { ALL_NAV } from "@/lib/nav";
 const LABELS: Record<string, string> = {
   dashboard: "Dashboard",
   reports: "Weekly Reports",
-  insights: "Insights",
-  feedback: "Feedback",
   settings: "Settings",
   new: "New Report",
 };

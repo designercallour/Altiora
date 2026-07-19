@@ -21,7 +21,6 @@ export const ROUTES = {
   newReport: "/reports/new",
   report: (id: string) => `/reports/${id}`,
   editReport: (id: string) => `/reports/${id}/edit`,
-  insights: "/insights",
-  feedback: "/feedback",
+  intern: (internshipId: string) => `/interns/${internshipId}`,
   settings: "/settings",
 } as const;

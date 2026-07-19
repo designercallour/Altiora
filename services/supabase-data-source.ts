@@ -39,9 +39,12 @@ import type {
   AppUser,
   Cohort,
   Department,
+  ExtractedConcept,
+  ExtractedSkill,
   Internship,
   InternSummary,
   LearningCategory,
+  LearningIntelligence,
   LearningLog,
   LearningSource,
   Lookups,
@@ -56,14 +59,24 @@ import type {
   WeeklySkillScore,
 } from "@/types/domain";
 
+interface ReportIntelligenceRow {
+  report_id: string;
+  summary: string | null;
+  learning_direction: string[] | null;
+  recommended_topics: string[] | null;
+  skills: ExtractedSkill[] | null;
+  concepts: ExtractedConcept[] | null;
+}
+
 type ReportRowWithChildren = WeeklyReportRow & {
   learning_logs: LearningLogRow[] | null;
   weekly_skill_scores: WeeklySkillScoreRow[] | null;
   mentor_feedback: MentorFeedbackRow[] | null;
+  report_intelligence: ReportIntelligenceRow[] | null;
 };
 
 const REPORT_SELECT =
-  "*, learning_logs(*), weekly_skill_scores(*), mentor_feedback(*)";
+  "*, learning_logs(*), weekly_skill_scores(*), mentor_feedback(*), report_intelligence(*)";
 
 // ── Row → domain mappers ──────────────────────────────────────────────────────
 const toUser = (r: UserRow): AppUser => ({
@@ -198,6 +211,7 @@ const toReport = (r: WeeklyReportRow): WeeklyReport => ({
   workingHours: r.working_hours,
   status: r.status,
   submittedAt: r.submitted_at,
+  reviewedAt: r.reviewed_at,
   createdAt: r.created_at,
   updatedAt: r.updated_at,
   deletedAt: r.deleted_at,
@@ -238,6 +252,19 @@ const toFeedback = (r: MentorFeedbackRow): MentorFeedback => ({
   deletedAt: r.deleted_at,
 });
 
+function toIntelligence(
+  row: ReportIntelligenceRow | null | undefined,
+): LearningIntelligence | null {
+  if (!row) return null;
+  return {
+    summary: row.summary ?? "",
+    skills: row.skills ?? [],
+    concepts: row.concepts ?? [],
+    learningDirection: row.learning_direction ?? [],
+    recommendedTopics: row.recommended_topics ?? [],
+  };
+}
+
 function hydrate(r: ReportRowWithChildren): WeeklyReportDetail {
   const feedback = (r.mentor_feedback ?? []).filter(
     (f) => f.deleted_at == null,
@@ -250,6 +277,7 @@ function hydrate(r: ReportRowWithChildren): WeeklyReportDetail {
       .sort((a, b) => a.createdAt.localeCompare(b.createdAt)),
     skillScores: (r.weekly_skill_scores ?? []).map(toSkillScore),
     feedback: feedback[0] ? toFeedback(feedback[0]) : null,
+    intelligence: toIntelligence(r.report_intelligence?.[0]),
   };
 }
 
@@ -429,13 +457,11 @@ export class SupabaseDataSource implements DataSource {
       const reports = internship
         ? reportRows
             .filter((r) => r.internship_id === internship.id)
-            .map((r) => ({ report: toReport(r), raw: r }))
-            .sort((a, b) => byWeekDesc(a.report, b.report))
+            .map((r) => toReport(r))
+            .sort(byWeekDesc)
         : [];
-      const submitted = reports.filter((r) => r.report.status === "submitted");
-      const needsReview = submitted.some(
-        (r) => !(r.raw.mentor_feedback ?? []).some((f) => f.deleted_at == null),
-      );
+      const submitted = reports.filter((r) => r.status === "submitted");
+      const needsReview = submitted.some((r) => r.reviewedAt == null);
 
       return {
         user: intern,
@@ -449,7 +475,7 @@ export class SupabaseDataSource implements DataSource {
               avatarUrl: mentorUser.avatarUrl,
             }
           : null,
-        latestReport: reports[0]?.report ?? null,
+        latestReport: reports[0] ?? null,
         submittedCount: submitted.length,
         needsReview,
       } satisfies InternSummary;
@@ -639,12 +665,43 @@ export class SupabaseDataSource implements DataSource {
     return detail;
   }
 
+  async markReportReviewed(id: string): Promise<WeeklyReportDetail> {
+    const supabase = await this.db();
+    await supabase
+      .from("weekly_reports")
+      .update({ reviewed_at: new Date().toISOString() })
+      .eq("id", id)
+      .is("reviewed_at", null);
+    const detail = await this.getReportById(id);
+    if (!detail) throw new Error(`Report ${id} not found`);
+    return detail;
+  }
+
   async deleteReport(id: string): Promise<void> {
     const supabase = await this.db();
     await supabase
       .from("weekly_reports")
       .update({ deleted_at: new Date().toISOString() })
       .eq("id", id);
+  }
+
+  async saveReportIntelligence(
+    reportId: string,
+    intelligence: LearningIntelligence,
+  ): Promise<void> {
+    const supabase = await this.db();
+    await supabase.from("report_intelligence").upsert(
+      {
+        report_id: reportId,
+        summary: intelligence.summary,
+        learning_direction: intelligence.learningDirection,
+        recommended_topics: intelligence.recommendedTopics,
+        skills: intelligence.skills,
+        concepts: intelligence.concepts,
+        updated_at: new Date().toISOString(),
+      },
+      { onConflict: "report_id" },
+    );
   }
 
   private async replaceChildren(

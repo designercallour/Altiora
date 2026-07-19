@@ -10,8 +10,14 @@ import {
   YAxis,
 } from "recharts";
 import type { SeriesPoint } from "@/lib/insights";
+import { moodLevel } from "@/lib/domain";
 
 const AXIS = "var(--muted-foreground)";
+
+/** Nearest mood level for a possibly-averaged value (1..6). */
+function nearestMood(v: number) {
+  return moodLevel(Math.min(6, Math.max(1, Math.round(v))));
+}
 
 const TOOLTIP_STYLE: React.CSSProperties = {
   background: "var(--popover)",
@@ -30,6 +36,7 @@ export function TrendChart({
   yDomain,
   valueSuffix = "",
   ariaLabel,
+  mood = false,
 }: {
   data: SeriesPoint[];
   color?: string;
@@ -37,6 +44,8 @@ export function TrendChart({
   yDomain?: [number, number];
   valueSuffix?: string;
   ariaLabel?: string;
+  /** Mood mode: emoji Y-axis + "😀 Great" tooltips. */
+  mood?: boolean;
 }) {
   const id = React.useId().replace(/:/g, "");
   const label =
@@ -69,14 +78,31 @@ export function TrendChart({
             domain={yDomain ?? ["auto", "auto"]}
             tickLine={false}
             axisLine={false}
-            tick={{ fontSize: 11, fill: AXIS }}
-            width={34}
+            tick={{ fontSize: mood ? 15 : 11, fill: AXIS }}
+            width={mood ? 30 : 34}
             allowDecimals={false}
+            ticks={mood ? [1, 2, 3, 4, 5, 6] : undefined}
+            tickFormatter={
+              mood ? (v) => nearestMood(Number(v))?.emoji ?? String(v) : undefined
+            }
           />
           <Tooltip
             contentStyle={TOOLTIP_STYLE}
             cursor={{ stroke: "var(--border)" }}
-            formatter={(v) => [`${v}${valueSuffix}`, ""] as [string, string]}
+            separator=""
+            formatter={
+              mood
+                ? (v) => {
+                    const m = nearestMood(Number(v));
+                    const label = m ? `${m.emoji} ${m.label}` : String(v);
+                    const decimal = Number(v) % 1 !== 0;
+                    return [decimal ? `${label} · ${v}` : label, ""] as [
+                      string,
+                      string,
+                    ];
+                  }
+                : (v) => [`${v}${valueSuffix}`, ""] as [string, string]
+            }
             labelStyle={{ color: "var(--muted-foreground)" }}
           />
           <Area

@@ -8,6 +8,10 @@ import {
   reportSubmitSchema,
   type ReportFormValues,
 } from "@/schemas/weekly-report";
+import {
+  extractLearning,
+  reflectionCorpus,
+} from "@/services/ai/learning-intelligence";
 import { ROUTES } from "@/lib/constants";
 
 export interface SavePayload {
@@ -96,7 +100,18 @@ export async function submitWeeklyReport(
   }
 
   const { reportId } = await saveWeeklyDraft(payload);
-  await getDataSource().submitReport(reportId);
+  const db = getDataSource();
+  await db.submitReport(reportId);
+
+  // Learning Intelligence: extract skills/concepts from the reflection text.
+  const intelligence = await extractLearning(
+    reflectionCorpus({
+      achievement: payload.values.achievement,
+      challenge: payload.values.challenge,
+      learnings: payload.values.learningLogs.map((l) => l.title),
+    }),
+  );
+  await db.saveReportIntelligence(reportId, intelligence);
 
   revalidatePath(ROUTES.dashboard);
   revalidatePath(ROUTES.reports);
