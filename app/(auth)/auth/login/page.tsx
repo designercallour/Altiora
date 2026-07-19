@@ -12,7 +12,19 @@ export const metadata: Metadata = { title: "Sign in" };
 
 const ROLE_ORDER: UserRole[] = ["admin", "mentor", "intern"];
 
-export default async function LoginPage() {
+const ERRORS: Record<string, string> = {
+  unauthorized:
+    "This Google account isn't authorized for Altiora. Ask an admin to add your email, then try again.",
+  auth: "Something went wrong signing you in. Please try again.",
+};
+
+export default async function LoginPage({
+  searchParams,
+}: {
+  searchParams: Promise<{ error?: string }>;
+}) {
+  const { error } = await searchParams;
+  const errorMessage = error ? ERRORS[error] : null;
   // Dev persona sign-in is a mock-mode affordance only. In supabase mode,
   // Google OAuth is the single entry point.
   const isMock = resolveDataSourceMode() === "mock";
@@ -37,6 +49,12 @@ export default async function LoginPage() {
           your week, track your growth, and learn together.
         </p>
       </div>
+
+      {errorMessage ? (
+        <div className="border-destructive/30 bg-destructive/5 text-destructive mt-6 rounded-lg border px-3.5 py-3 text-sm">
+          {errorMessage}
+        </div>
+      ) : null}
 
       <div className="mt-8">
         <GoogleSignInButton defaultUserId={defaultUser?.id ?? ""} />
