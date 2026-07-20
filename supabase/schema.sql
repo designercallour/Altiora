@@ -338,6 +338,23 @@ create index if not exists mentor_assignments_mentor_idx
 create unique index if not exists mentor_assignments_one_open_key
   on public.mentor_assignments (internship_id) where ended_at is null;
 
+-- In-app notifications (reminder inbox). First real delivery channel (ADR-0008).
+create table if not exists public.notifications (
+  id           uuid primary key default gen_random_uuid(),
+  recipient_id uuid not null references public.users (id) on delete cascade,
+  type         text not null,
+  title        text not null,
+  body         text,
+  payload      jsonb not null default '{}',
+  dedupe_key   text,
+  read_at      timestamptz,
+  created_at   timestamptz not null default now()
+);
+create index if not exists notifications_recipient_unread_idx
+  on public.notifications (recipient_id, created_at desc) where read_at is null;
+create unique index if not exists notifications_dedupe_key
+  on public.notifications (recipient_id, dedupe_key) where dedupe_key is not null;
+
 -- ----------------------------------------------------------------------------
 -- updated_at triggers
 -- ----------------------------------------------------------------------------
@@ -386,7 +403,7 @@ declare t text;
     'departments','teams','cohorts','projects','skill_categories','skills',
     'learning_categories','learning_sources','users','internships',
     'weekly_reports','weekly_skill_scores','learning_logs','mentor_feedback',
-    'report_intelligence','mentor_assignments'
+    'report_intelligence','mentor_assignments','notifications'
   ];
 begin
   foreach t in array tables loop
@@ -603,6 +620,21 @@ create policy "ma_intern_select" on public.mentor_assignments for select
     where i.id = mentor_assignments.internship_id
       and i.user_id = public.current_app_user_id()
   ));
+
+-- notifications ---------------------------------------------------------------
+drop policy if exists "notifications_admin_all"  on public.notifications;
+drop policy if exists "notifications_own_select" on public.notifications;
+drop policy if exists "notifications_own_update" on public.notifications;
+
+create policy "notifications_admin_all" on public.notifications for all
+  using (public.is_admin()) with check (public.is_admin());
+
+create policy "notifications_own_select" on public.notifications for select
+  using (recipient_id = public.current_app_user_id());
+
+create policy "notifications_own_update" on public.notifications for update
+  using (recipient_id = public.current_app_user_id())
+  with check (recipient_id = public.current_app_user_id());
 
 -- ============================================================================
 -- AUTH INTEGRATION

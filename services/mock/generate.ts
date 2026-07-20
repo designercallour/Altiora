@@ -22,6 +22,7 @@ import type {
   LearningLog,
   LearningSource,
   MentorAssignment,
+  NotificationRecord,
   MentorFeedback,
   Project,
   Skill,
@@ -75,6 +76,7 @@ export interface MockDataset {
   feedback: MentorFeedback[];
   intelligence: ReportIntelligence[];
   mentorAssignments: MentorAssignment[];
+  notifications: NotificationRecord[];
   currentUserId: string;
 }
 
@@ -411,6 +413,7 @@ export function generateDataset(): MockDataset {
     feedback,
     intelligence,
     mentorAssignments,
+    notifications: [],
     currentUserId: interns[0]!.id,
   };
 }
