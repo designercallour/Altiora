@@ -1,7 +1,8 @@
 import Link from "next/link";
 import { ArrowRight } from "lucide-react";
-import { Avatar, AvatarFallback } from "@/components/ui/avatar";
+import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar";
 import { Badge } from "@/components/ui/badge";
+import { StatusChip } from "@/components/shared/status-chip";
 import { moodLevel } from "@/lib/domain";
 import { formatDate, getInitials } from "@/lib/format";
 import type { InternSummary } from "@/types/domain";
@@ -33,6 +34,9 @@ export function InternRow({
         }
       >
         <Avatar>
+          {summary.user.avatarUrl ? (
+            <AvatarImage src={summary.user.avatarUrl} alt="" />
+          ) : null}
           <AvatarFallback>{getInitials(summary.user.fullName)}</AvatarFallback>
         </Avatar>
         <div className="min-w-0 flex-1">
@@ -40,10 +44,13 @@ export function InternRow({
             {summary.user.fullName}
           </p>
           <p className="text-muted-foreground truncate text-xs">
-            {summary.cohort?.name ?? "—"} · {summary.department?.name ?? "—"} ·{" "}
-            {summary.submittedCount} reflections
+            {summary.cohort?.name ?? "No cohort"} · {summary.submittedCount}{" "}
+            reflections
           </p>
         </div>
+        {!cta ? (
+          <StatusChip internship={summary.internship} className="hidden sm:flex" />
+        ) : null}
         {summary.latestReport ? (
           <div className="shrink-0 text-right leading-tight">
             <p className="text-sm font-medium tabular-nums">

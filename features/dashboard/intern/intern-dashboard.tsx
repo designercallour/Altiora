@@ -1,8 +1,16 @@
 import Link from "next/link";
 import { format } from "date-fns";
-import { ArrowRight, BookOpen, NotebookPen, Sparkles } from "lucide-react";
+import {
+  ArrowRight,
+  BookOpen,
+  CalendarClock,
+  NotebookPen,
+  Sparkles,
+  UserRound,
+} from "lucide-react";
 import { getDataSource } from "@/services";
 import { weekRange } from "@/lib/week";
+import { internshipLifecycle } from "@/lib/internship";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { PageContainer } from "@/components/shared/page-container";
 import { PageHeader } from "@/components/shared/page-header";
@@ -57,7 +65,13 @@ export async function InternDashboard({ user }: { user: AppUser }) {
     );
   }
 
-  const details = await db.listReportDetails({ internshipId: internship.id });
+  const [details, mentor] = await Promise.all([
+    db.listReportDetails({ internshipId: internship.id }),
+    internship.mentorId
+      ? db.getUserById(internship.mentorId)
+      : Promise.resolve(null),
+  ]);
+  const life = internshipLifecycle(internship, now);
 
   const submitted = submittedAsc(details);
   const cw = weekRange(now);
@@ -128,6 +142,62 @@ export async function InternDashboard({ user }: { user: AppUser }) {
           </Card>
         </Reveal>
       ) : null}
+
+      {/* Internship period */}
+      <Reveal delay={0.05}>
+        <Card className="mt-6">
+          <CardContent className="space-y-4">
+            <div className="flex flex-wrap items-center justify-between gap-3">
+              <div className="flex items-center gap-2.5">
+                <span className="bg-muted text-muted-foreground flex size-8 items-center justify-center rounded-lg">
+                  <CalendarClock className="size-4" />
+                </span>
+                <div>
+                  <p className="text-sm font-medium">
+                    {internship.position ?? "Your internship"}
+                  </p>
+                  <p className="text-muted-foreground text-xs">
+                    {formatDate(internship.startDate)} –{" "}
+                    {internship.endDate
+                      ? formatDate(internship.endDate)
+                      : "open"}
+                  </p>
+                </div>
+              </div>
+              <div className="text-right">
+                <p className="text-lg font-semibold tabular-nums">
+                  {life.weeksRemaining != null
+                    ? `${life.weeksRemaining} week${life.weeksRemaining === 1 ? "" : "s"}`
+                    : "—"}
+                </p>
+                <p className="text-muted-foreground text-xs">remaining</p>
+              </div>
+            </div>
+            <div
+              className="bg-muted h-2 w-full overflow-hidden rounded-full"
+              role="progressbar"
+              aria-valuenow={Math.round(life.progress * 100)}
+              aria-valuemin={0}
+              aria-valuemax={100}
+              aria-label="Internship progress"
+            >
+              <div
+                className="bg-primary h-full rounded-full transition-all"
+                style={{ width: `${Math.round(life.progress * 100)}%` }}
+              />
+            </div>
+            {mentor ? (
+              <p className="text-muted-foreground flex items-center gap-1.5 text-sm">
+                <UserRound className="size-3.5" />
+                Mentored by{" "}
+                <span className="text-foreground font-medium">
+                  {mentor.fullName}
+                </span>
+              </p>
+            ) : null}
+          </CardContent>
+        </Card>
+      </Reveal>
 
       {/* Stats */}
       <Stagger className="mt-6 grid grid-cols-2 gap-4 lg:grid-cols-3">

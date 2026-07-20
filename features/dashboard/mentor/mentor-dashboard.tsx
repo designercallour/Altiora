@@ -1,6 +1,13 @@
-import { CheckCircle2, Clock, MessageSquareQuote, Users } from "lucide-react";
+import {
+  CheckCircle2,
+  Clock,
+  Hourglass,
+  MessageSquareQuote,
+  Users,
+} from "lucide-react";
 import { getDataSource } from "@/services";
 import { weekRangeFrom } from "@/lib/week";
+import { internshipStatus, endsWithinDays } from "@/lib/internship";
 import { PageContainer } from "@/components/shared/page-container";
 import { PageHeader } from "@/components/shared/page-header";
 import { SectionHeader } from "@/components/shared/section-header";
@@ -33,9 +40,14 @@ export async function MentorDashboard({ user }: { user: AppUser }) {
   const lastWeek = weekRangeFrom(new Date(), -1);
 
   const needsFeedback = interns.filter((i) => i.needsReview);
-  const active = interns.filter((i) => i.internship?.status === "active");
+  const active = interns.filter(
+    (i) => i.internship && internshipStatus(i.internship) === "active",
+  );
   const behind = active.filter((i) => !reflectedInWeek(i, lastWeek));
   const reflected = active.length - behind.length;
+  const endingSoon = active.filter(
+    (i) => i.internship && endsWithinDays(i.internship, 7),
+  );
 
   return (
     <PageContainer>
@@ -124,6 +136,30 @@ export async function MentorDashboard({ user }: { user: AppUser }) {
           />
           <ul className="space-y-2">
             {behind.map((s) => (
+              <InternRow
+                key={s.user.id}
+                summary={s}
+                href={
+                  s.internship
+                    ? ROUTES.intern(s.internship.id)
+                    : ROUTES.dashboard
+                }
+              />
+            ))}
+          </ul>
+        </section>
+      ) : null}
+
+      {/* Ending soon */}
+      {endingSoon.length > 0 ? (
+        <section className="mt-10 space-y-4">
+          <SectionHeader
+            title="Wrapping up soon"
+            description="Internships ending within 7 days — a good moment for a closing conversation"
+            icon={Hourglass}
+          />
+          <ul className="space-y-2">
+            {endingSoon.map((s) => (
               <InternRow
                 key={s.user.id}
                 summary={s}
