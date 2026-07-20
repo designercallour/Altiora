@@ -1,5 +1,12 @@
 import type { LucideIcon } from "lucide-react";
-import { LayoutDashboard, NotebookPen, Settings } from "lucide-react";
+import {
+  GraduationCap,
+  LayoutDashboard,
+  Layers,
+  NotebookPen,
+  Settings,
+  UsersRound,
+} from "lucide-react";
 import { ROUTES } from "./constants";
 import type { UserRole } from "@/types/domain";
 
@@ -33,6 +40,27 @@ export const PRIMARY_NAV: NavItem[] = [
     icon: NotebookPen,
     description: "Reflect on your week",
     roles: ["intern"],
+  },
+  {
+    label: "Interns",
+    href: ROUTES.adminInterns,
+    icon: GraduationCap,
+    description: "Manage the intern roster",
+    roles: ["admin"],
+  },
+  {
+    label: "Mentors",
+    href: ROUTES.adminMentors,
+    icon: UsersRound,
+    description: "Manage mentors & workload",
+    roles: ["admin"],
+  },
+  {
+    label: "Cohorts",
+    href: ROUTES.adminCohorts,
+    icon: Layers,
+    description: "Organize interns into cohorts",
+    roles: ["admin"],
   },
 ];
 
