@@ -3,10 +3,11 @@ import { redirect } from "next/navigation";
 import { NotebookPen } from "lucide-react";
 import { getCurrentUser } from "@/lib/session";
 import { getDataSource } from "@/services";
-import { weekRange, formatWeekLabel } from "@/lib/week";
+import { weekRange, formatWeekLabel, isWeeklyReflectionOpen } from "@/lib/week";
 import { PageContainer } from "@/components/shared/page-container";
 import { PageHeader } from "@/components/shared/page-header";
 import { EmptyState } from "@/components/shared/empty-state";
+import { CalendarClock } from "lucide-react";
 import { ReportWizard } from "@/features/weekly-report/components/report-wizard";
 import {
   defaultFormValues,
@@ -41,6 +42,28 @@ export default async function NewReportPage() {
 
   const now = new Date();
   const range = weekRange(now);
+
+  // The weekly reflection is an end-of-week ritual: it only opens Friday 09:00
+  // WIB through Sunday. Before then the form is locked (enforced server-side in
+  // the save/submit actions too).
+  if (!isWeeklyReflectionOpen(now)) {
+    return (
+      <PageContainer size="narrow">
+        <PageHeader
+          title="Weekly Report"
+          description="Your weekly reflection opens at the end of the week."
+        />
+        <div className="mt-8">
+          <EmptyState
+            icon={CalendarClock}
+            title="This week's reflection isn't open yet"
+            description="Weekly reflections open every Friday at 09:00 WIB and stay open through Sunday. Check back then to reflect on your week."
+          />
+        </div>
+      </PageContainer>
+    );
+  }
+
   const lookups = await db.getLookups();
 
   const existing = await db.getReportByWeek(
