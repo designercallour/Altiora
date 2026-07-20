@@ -48,6 +48,24 @@ export function weekKey(year: number, week: number): string {
   return `${year}-W${String(week).padStart(2, "0")}`;
 }
 
+const WIB_OFFSET_MS = 7 * 60 * 60 * 1000; // WIB = UTC+7
+
+/**
+ * Is the weekly-reflection window open for the current ISO week?
+ *
+ * The reflection is an end-of-week ritual: interns are prompted only from
+ * **Friday 09:00 WIB** through the end of that ISO week (Sunday). Monday–Thursday
+ * (and Friday before 09:00 WIB) it stays closed. Mirrors the Friday reminder cron.
+ */
+export function isWeeklyReflectionOpen(now: Date = new Date()): boolean {
+  const wib = new Date(now.getTime() + WIB_OFFSET_MS);
+  const day = wib.getUTCDay(); // 0 Sun … 5 Fri, 6 Sat
+  const hour = wib.getUTCHours();
+  if (day === 6 || day === 0) return true; // Sat, Sun (still this ISO week)
+  if (day === 5 && hour >= 9) return true; // Fri from 09:00 WIB
+  return false;
+}
+
 /** e.g. "Week 3 · Jan 12 – Jan 18". */
 export function formatWeekLabel(range: WeekRange): string {
   const start = new Date(`${range.startDate}T00:00:00Z`);

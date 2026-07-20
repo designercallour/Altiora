@@ -23,10 +23,11 @@ export async function GET(req: Request) {
   }
 
   const now = new Date();
-  // Which week to chase. Default -1 (last week); `?offset=0` = current week.
-  // Clamped so a stray value can't scan far back.
-  const raw = Number(new URL(req.url).searchParams.get("offset") ?? "-1");
-  const offset = Number.isFinite(raw) ? Math.min(0, Math.max(-8, raw)) : -1;
+  // Which week to remind about. Default 0 = the current (ending) week — the
+  // Friday run prompts interns to reflect on the week that's wrapping up.
+  // `?offset=-1` targets last week (manual catch-up). Clamped.
+  const raw = Number(new URL(req.url).searchParams.get("offset") ?? "0");
+  const offset = Number.isFinite(raw) ? Math.min(0, Math.max(-8, raw)) : 0;
   const target = weekRangeFrom(now, offset);
 
   const db =
