@@ -12,6 +12,7 @@ import {
   extractLearning,
   reflectionCorpus,
 } from "@/services/ai/learning-intelligence";
+import { isInternshipActive } from "@/lib/internship";
 import { ROUTES } from "@/lib/constants";
 
 export interface SavePayload {
@@ -96,6 +97,18 @@ export async function submitWeeklyReport(
     return {
       ok: false,
       error: parsed.error.issues[0]?.message ?? "Please complete the report.",
+    };
+  }
+
+  // Access control (server-side, defense in depth): reflections can only be
+  // submitted while the internship is active — never trust the client gate.
+  const internship = await getDataSource().getInternshipById(
+    payload.internshipId,
+  );
+  if (!isInternshipActive(internship)) {
+    return {
+      ok: false,
+      error: "Your internship isn't active, so reflections are closed.",
     };
   }
 
