@@ -12,11 +12,15 @@
 
 import type {
   AppUser,
+  Cohort,
+  InternDetail,
   Internship,
   InternSummary,
   LearningIntelligence,
   Lookups,
+  MentorAssignmentDetail,
   MentorFeedback,
+  MentorSummary,
   ReportStatus,
   UserRole,
   WeeklyReport,
@@ -85,6 +89,37 @@ export interface FeedbackInput {
   rating: number | null;
 }
 
+export interface InternInput {
+  fullName: string;
+  email: string;
+  cohortId: string | null;
+  startDate: string;
+  endDate: string;
+  mentorId: string | null;
+  position: string | null;
+  notes: string | null;
+}
+export type InternUpdate = Partial<InternInput>;
+
+export interface MentorInput {
+  fullName: string;
+  email: string;
+}
+export type MentorUpdate = Partial<MentorInput>;
+
+export interface CohortInput {
+  name: string;
+  description: string | null;
+  startDate: string;
+  endDate: string;
+}
+export type CohortUpdate = Partial<CohortInput>;
+
+export interface AssignMentorOptions {
+  assignedById?: string | null;
+  note?: string | null;
+}
+
 // ── The interface ──────────────────────────────────────────────────────────────
 export interface DataSource {
   // Session / identity ---------------------------------------------------------
@@ -102,6 +137,41 @@ export interface DataSource {
   getInternshipById(id: string): Promise<Internship | null>;
   getActiveInternshipForUser(userId: string): Promise<Internship | null>;
   listInternships(query?: InternQuery): Promise<Internship[]>;
+
+  // Cohort management ----------------------------------------------------------
+  listCohorts(): Promise<Cohort[]>;
+  getCohortById(id: string): Promise<Cohort | null>;
+  createCohort(input: CohortInput): Promise<Cohort>;
+  updateCohort(id: string, patch: CohortUpdate): Promise<Cohort>;
+  archiveCohort(id: string): Promise<void>;
+
+  // Intern management ----------------------------------------------------------
+  getInternDetail(internshipId: string): Promise<InternDetail | null>;
+  /** Onboard an intern: creates the user, the internship, and (in supabase) the allowlist entry. */
+  createIntern(input: InternInput): Promise<InternSummary>;
+  updateIntern(
+    internshipId: string,
+    patch: InternUpdate,
+  ): Promise<InternSummary>;
+  archiveIntern(internshipId: string): Promise<void>;
+
+  // Mentor management ----------------------------------------------------------
+  listMentors(): Promise<MentorSummary[]>;
+  getMentorById(id: string): Promise<AppUser | null>;
+  createMentor(input: MentorInput): Promise<MentorSummary>;
+  updateMentor(id: string, patch: MentorUpdate): Promise<MentorSummary>;
+  archiveMentor(id: string): Promise<void>;
+
+  // Mentor assignment ----------------------------------------------------------
+  /** Reassign the internship's mentor, preserving history (closes prior span). */
+  assignMentor(
+    internshipId: string,
+    mentorId: string,
+    opts?: AssignMentorOptions,
+  ): Promise<void>;
+  listMentorAssignments(
+    internshipId: string,
+  ): Promise<MentorAssignmentDetail[]>;
 
   // Weekly reports -------------------------------------------------------------
   listReports(query?: ReportQuery): Promise<WeeklyReport[]>;

@@ -4,7 +4,7 @@
  * Status is NEVER stored or manually edited. It is derived purely from the
  * internship period (start/end dates) relative to "now". The product surfaces
  * only two statuses — Active / Inactive — while `phase` gives finer detail for
- * UI copy (upcoming vs. completed). See docs/adr/0002-computed-internship-status.md.
+ * UI copy (upcoming vs. completed). See docs/adr/0007-computed-internship-status.md.
  */
 import type { Internship } from "@/types/domain";
 

@@ -21,6 +21,7 @@ import type {
   LearningCategory,
   LearningLog,
   LearningSource,
+  MentorAssignment,
   MentorFeedback,
   Project,
   Skill,
@@ -73,6 +74,7 @@ export interface MockDataset {
   learningLogs: LearningLog[];
   feedback: MentorFeedback[];
   intelligence: ReportIntelligence[];
+  mentorAssignments: MentorAssignment[];
   currentUserId: string;
 }
 
@@ -218,9 +220,25 @@ export function generateDataset(): MockDataset {
       startDate: cohort.startDate,
       endDate: cohort.endDate,
       status: completed ? "completed" : "active",
+      notes: null,
       ...ts,
     };
   });
+
+  // Mentor assignment history — one open span per internship's current mentor.
+  const mentorAssignments: MentorAssignment[] = internships
+    .filter((i) => i.mentorId)
+    .map((i) => ({
+      id: rng.uuid(),
+      internshipId: i.id,
+      mentorId: i.mentorId!,
+      assignedById: admin.id,
+      note: null,
+      startedAt: `${i.startDate}T00:00:00.000Z`,
+      endedAt: null,
+      createdAt: `${i.startDate}T00:00:00.000Z`,
+      updatedAt: `${i.startDate}T00:00:00.000Z`,
+    }));
 
   // Source weighting: mentor/project/self-learning are most common.
   const sourceWeights = learningSources.map((s) =>
@@ -392,6 +410,7 @@ export function generateDataset(): MockDataset {
     learningLogs,
     feedback,
     intelligence,
+    mentorAssignments,
     currentUserId: interns[0]!.id,
   };
 }

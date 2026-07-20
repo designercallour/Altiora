@@ -5,7 +5,7 @@
  * (in-app, email, …) subscribe to the dispatcher. Adding a NEW notification
  * type means adding one variant to `NotificationType` + its payload — the
  * dispatch plumbing and channels never change. See
- * docs/adr/0003-notification-architecture.md.
+ * docs/adr/0008-notification-architecture.md.
  */
 
 export type NotificationType =
