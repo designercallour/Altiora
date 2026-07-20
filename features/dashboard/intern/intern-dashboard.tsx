@@ -9,7 +9,7 @@ import {
   UserRound,
 } from "lucide-react";
 import { getDataSource } from "@/services";
-import { weekRange } from "@/lib/week";
+import { weekRange, isWeeklyReflectionOpen } from "@/lib/week";
 import { internshipLifecycle } from "@/lib/internship";
 import { ReminderBanner } from "@/features/notifications/components/reminder-banner";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
@@ -122,8 +122,8 @@ export async function InternDashboard({ user }: { user: AppUser }) {
         </div>
       ) : null}
 
-      {/* This-week nudge */}
-      {!reflectedThisWeek ? (
+      {/* This-week nudge — only from Friday 09:00 WIB through Sunday. */}
+      {!reflectedThisWeek && isWeeklyReflectionOpen(now) ? (
         <Reveal delay={0.04}>
           <Card className="border-primary/30 bg-primary/[0.03] mt-8">
             <CardContent className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
