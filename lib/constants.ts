@@ -22,5 +22,11 @@ export const ROUTES = {
   report: (id: string) => `/reports/${id}`,
   editReport: (id: string) => `/reports/${id}/edit`,
   intern: (internshipId: string) => `/interns/${internshipId}`,
+  internshipComplete: "/internship-complete",
   settings: "/settings",
+  // Admin management
+  adminInterns: "/admin/interns",
+  adminMentors: "/admin/mentors",
+  adminMentor: (id: string) => `/admin/mentors/${id}`,
+  adminCohorts: "/admin/cohorts",
 } as const;

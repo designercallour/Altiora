@@ -21,8 +21,8 @@ This document is the map of the codebase. It is kept current as phases land.
 | Charts        | Recharts                                           |
 | Toasts        | Sonner                                             |
 | Theming       | next-themes (class strategy, dark mode)            |
-| Backend       | Supabase (Postgres + Auth, Google OAuth) — Phase 3 |
-| Data access   | `DataSource` interface — mock now, Supabase later  |
+| Backend       | Supabase (Postgres + Auth, Google OAuth)           |
+| Data access   | `DataSource` interface — mock or Supabase by env    |
 
 > **Next 16, not 15:** `create-next-app@latest` ships Next 16 as of mid-2026.
 > It is a superset of the Next 15 App Router the brief specified — same RSC and
@@ -60,12 +60,47 @@ No feature code changes. That is the whole point of the abstraction.
 
 ---
 
+## Internship program management
+
+The management layer (admin CRUD for interns, mentors, cohorts, and mentor
+assignment) is built on three load-bearing decisions:
+
+- **Computed status is the single source of truth.** An internship's
+  Active/Inactive state is derived from its period at read time in
+  [`lib/internship.ts`](lib/internship.ts) — never stored or manually edited. The
+  `internships.status` column is retained only for backward compatibility and is
+  deprecated. Access control (inactive interns are gated to
+  `/internship-complete`), dashboards, and filters all key off the computed value.
+  See ADR-0007. `StatusChip` (`components/shared/status-chip.tsx`) is the one
+  visual representation.
+- **Mentor assignment keeps a current pointer + full history.**
+  `internships.mentor_id` answers "who is the mentor now" in one indexed read;
+  `mentor_assignments` records every span for audit. `DataSource.assignMentor()`
+  is the single write path — it closes the open span and opens a new one, and a
+  partial unique index guarantees one active mentor per intern. Assignment is
+  reachable from both the intern detail page and the mentor detail page. See
+  ADR-0009.
+- **Notifications are event + channel, delivery deferred.**
+  [`lib/notifications.ts`](lib/notifications.ts) defines typed events (e.g.
+  `intern_assigned`, `mentor_reassigned`) dispatched to pluggable channels. Only a
+  no-op channel is registered today; in-app/email channels slot in with zero call-
+  site changes. See ADR-0008.
+
+All admin mutations run through `features/admin/actions.ts`, which re-checks the
+admin role server-side (never trusting the client) and validates input with the
+Zod schemas in `schemas/` before touching the DataSource.
+
+---
+
 ## Folder structure
 
 ```
 app/                      # Routes (App Router)
   (auth)/                 # Public auth routes            — Phase 3
   (app)/                  # Authenticated shell + pages   — Phase 4+
+    admin/                # Admin-only management (layout guards role)
+    interns/[id]/         # Intern profile + admin management panel
+  internship-complete/    # Standalone page for inactive interns
   layout.tsx              # Root layout (Inter, metadata)
   globals.css             # Tailwind v4 + design tokens
 
@@ -81,6 +116,9 @@ features/                 # Feature-first modules (self-contained)
   dashboard/
     intern/ mentor/ admin/ # Role-specific dashboards — Phase 6
   reports/                # Report list + detail + feedback
+  admin/                  # Program management (interns, mentors, cohorts)
+    actions.ts            # Server actions (admin-guarded CRUD + assignment)
+    components/           # Form dialogs, management lists, assignment UX
 
 lib/                      # Framework-agnostic helpers
   constants.ts            # App name, routes
@@ -122,6 +160,9 @@ product owner's request.
 6. ✅ Dashboards (intern growth · mentor coaching · admin insights)
 7. ✅ Analytics & charts (lib/insights + themed Recharts)
 8. ✅ Polish — motion, states, responsive, a11y, dark mode
+9. ✅ Internship program management (computed status + lifecycle access control)
+10. ✅ Admin management UIs (interns, mentors, cohorts) + mentor assignment history
+11. ✅ Dashboard overhaul (admin org metrics, mentor-scoped, intern self)
 
 See `docs/FINAL_REPORT.md` for the full account and `docs/PRODUCT_IDEAS.md` for
 the roadmap of ideas discovered along the way.

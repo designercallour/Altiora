@@ -50,8 +50,10 @@ erDiagram
   users ||--o{ internships : "is intern"
   users ||--o{ internships : "is mentor"
   users ||--o{ mentor_feedback : "authors"
+  users ||--o{ mentor_assignments : "mentored in"
 
   internships ||--o{ weekly_reports : "produces"
+  internships ||--o{ mentor_assignments : "supervision history"
 
   weekly_reports ||--o{ weekly_skill_scores : "scores"
   weekly_reports ||--o{ learning_logs : "logs"
@@ -143,6 +145,17 @@ erDiagram
     date start_date
     date end_date
     internship_status status
+    text notes
+  }
+
+  mentor_assignments {
+    uuid id PK
+    uuid internship_id FK
+    uuid mentor_id FK
+    uuid assigned_by_id FK
+    text note
+    timestamptz started_at
+    timestamptz ended_at
   }
 
   weekly_reports {
@@ -238,6 +251,21 @@ enforces one live report per ISO week per engagement.
 All three cascade-delete with their parent report, and reports cascade-delete
 with their internship.
 
+**`mentor_assignments` is the supervision audit trail.** `internships.mentor_id`
+is the fast, indexed pointer to the *current* mentor; `mentor_assignments` records
+the full history — one row per supervision span (`started_at` → `ended_at`, with
+who assigned it and an optional note). Reassignment closes the open span
+(`ended_at = now()`) and opens a new one; the pointer and the open span are kept
+in lock-step by the DataSource, and a partial unique index
+(`mentor_assignments_one_open_key on (internship_id) where ended_at is null`)
+guarantees an internship can never have two active mentors at once. See ADR-0009.
+
+**Status is computed, never stored.** `internships.status` remains as a column
+for backward compatibility but is **deprecated as a source of truth**. The product
+derives Active/Inactive purely from the period (`start_date`/`end_date`) at read
+time — see [`lib/internship.ts`](../lib/internship.ts) and ADR-0007. This keeps
+status impossible to get out of sync and removes any manual-edit surface.
+
 ---
 
 ## Why every table exists
@@ -258,6 +286,7 @@ with their internship.
 | `weekly_skill_scores` | Per-skill 1..5 rating within a report.                   | Quantitative skill trajectories over time.                                               |
 | `learning_logs`       | First-class learning records within a report.            | The intelligence layer: source/category/project effectiveness, applied-rate.             |
 | `mentor_feedback`     | Mentor's response to a report (0..1).                    | Supervisory signal; links mentor input to subsequent growth.                             |
+| `mentor_assignments`  | Supervision spans per internship (history).              | Audit trail of who mentored whom and when; one active mentor enforced by partial index.  |
 
 ---
 
@@ -269,12 +298,13 @@ with their internship.
   ISO dates (`start_date`, `end_date`) are `date`.
 - **`created_at` + `updated_at` everywhere** — both `timestamptz not null
 default now()`. `updated_at` is maintained by the shared
-  `public.set_updated_at()` trigger, attached to all 14 tables via a
+  `public.set_updated_at()` trigger, attached to all 15 tables via a
   `before update ... for each row` trigger loop.
-- **`deleted_at` soft delete** — present on all mutable domain tables. The one
-  exception is `weekly_skill_scores`, which has no `deleted_at` (scores are
-  replaced wholesale per report, not individually retired). Rows are never hard-
-  deleted through the app; queries filter `where deleted_at is null`.
+- **`deleted_at` soft delete** — present on all mutable domain tables. Two
+  exceptions: `weekly_skill_scores` (scores are replaced wholesale per report, not
+  individually retired) and `mentor_assignments` (spans are closed with `ended_at`,
+  not deleted — "ended" is a real domain event the audit trail needs). Rows are
+  never hard-deleted through the app; queries filter `where deleted_at is null`.
 - **Partial unique indexes `where deleted_at is null`** — uniqueness applies to
   _live_ rows only, so a soft-deleted slug/period can be reused. Examples:
   `departments_slug_key`, `teams_dept_slug_key`, `cohorts_slug_key`,
@@ -297,7 +327,7 @@ default now()`. `updated_at` is maintained by the shared
 
 ## Row Level Security model
 
-RLS is enabled on **all 14 tables**. Access resolves by app role:
+RLS is enabled on **all 15 tables**. Access resolves by app role:
 
 - **admin** — full access to everything (`is_admin()` on `for all`).
 - **mentor** — read access limited to interns assigned via
@@ -305,6 +335,8 @@ RLS is enabled on **all 14 tables**. Access resolves by app role:
 - **intern** — access limited to their own data via `internships.user_id`;
   interns create/update/delete their own reports and children.
 - **lookup tables** — any authenticated user may `select`; only admins may write.
+- **`mentor_assignments`** — admins manage all; a mentor may read spans where they
+  are (or were) the mentor; an intern may read their own supervision history.
 
 ### SECURITY DEFINER helper functions
 

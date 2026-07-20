@@ -120,7 +120,29 @@ export interface Internship extends Timestamps, SoftDelete {
   position: string | null;
   startDate: string;
   endDate: string | null;
+  /** @deprecated Status is computed from the period — see lib/internship.ts. */
   status: InternshipStatus;
+  notes: string | null;
+}
+
+/**
+ * One mentor-supervision span for an internship. Reassignment closes the
+ * current span (sets endedAt) and opens a new one, preserving an audit trail.
+ * The current mentor is the assignment with endedAt = null.
+ */
+export interface MentorAssignment extends Timestamps {
+  id: string;
+  internshipId: string;
+  mentorId: string;
+  assignedById: string | null;
+  note: string | null;
+  startedAt: string;
+  endedAt: string | null;
+}
+
+/** A mentor assignment with its mentor resolved, for history timelines. */
+export interface MentorAssignmentDetail extends MentorAssignment {
+  mentor: Pick<AppUser, "id" | "fullName" | "avatarUrl"> | null;
 }
 
 // ── Weekly report + children ──────────────────────────────────────────────────
@@ -220,6 +242,24 @@ export interface InternSummary {
   latestReport: WeeklyReport | null;
   submittedCount: number;
   needsReview: boolean; // has a submitted report not yet marked reviewed
+}
+
+/** A mentor with workload context, for mentor management + dashboards. */
+export interface MentorSummary {
+  user: AppUser;
+  activeInternCount: number;
+  totalInternCount: number;
+}
+
+/** Full intern record for the admin detail page. */
+export interface InternDetail {
+  user: AppUser;
+  internship: Internship | null;
+  cohort: Cohort | null;
+  mentor: Pick<AppUser, "id" | "fullName" | "avatarUrl"> | null;
+  assignments: MentorAssignmentDetail[];
+  submittedCount: number;
+  latestReport: WeeklyReport | null;
 }
 
 /** All lookup data, loaded once and passed to forms/filters. */

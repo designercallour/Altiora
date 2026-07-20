@@ -208,6 +208,7 @@ create table if not exists public.internships (
   start_date    date not null,
   end_date      date,
   status        internship_status not null default 'active',
+  notes         text,
   created_at    timestamptz not null default now(),
   updated_at    timestamptz not null default now(),
   deleted_at    timestamptz
@@ -318,6 +319,25 @@ create table if not exists public.report_intelligence (
   updated_at         timestamptz not null default now()
 );
 
+-- Mentor assignment history (see ADR-0009). Current mentor = the open span.
+create table if not exists public.mentor_assignments (
+  id             uuid primary key default gen_random_uuid(),
+  internship_id  uuid not null references public.internships (id) on delete cascade,
+  mentor_id      uuid not null references public.users (id)       on delete cascade,
+  assigned_by_id uuid references public.users (id)                on delete set null,
+  note           text,
+  started_at     timestamptz not null default now(),
+  ended_at       timestamptz,
+  created_at     timestamptz not null default now(),
+  updated_at     timestamptz not null default now()
+);
+create index if not exists mentor_assignments_internship_idx
+  on public.mentor_assignments (internship_id);
+create index if not exists mentor_assignments_mentor_idx
+  on public.mentor_assignments (mentor_id);
+create unique index if not exists mentor_assignments_one_open_key
+  on public.mentor_assignments (internship_id) where ended_at is null;
+
 -- ----------------------------------------------------------------------------
 -- updated_at triggers
 -- ----------------------------------------------------------------------------
@@ -328,7 +348,7 @@ declare
     'departments','teams','cohorts','projects','skill_categories','skills',
     'learning_categories','learning_sources','users','internships',
     'weekly_reports','weekly_skill_scores','learning_logs','mentor_feedback',
-    'report_intelligence'
+    'report_intelligence','mentor_assignments'
   ];
 begin
   foreach t in array tables loop
@@ -366,7 +386,7 @@ declare t text;
     'departments','teams','cohorts','projects','skill_categories','skills',
     'learning_categories','learning_sources','users','internships',
     'weekly_reports','weekly_skill_scores','learning_logs','mentor_feedback',
-    'report_intelligence'
+    'report_intelligence','mentor_assignments'
   ];
 begin
   foreach t in array tables loop
@@ -563,6 +583,26 @@ create policy "ri_intern_write" on public.report_intelligence for all
 
 create policy "ri_mentor_select" on public.report_intelligence for select
   using (public.mentors_report(report_id));
+
+-- mentor_assignments -----------------------------------------------------------
+drop policy if exists "ma_admin_all"     on public.mentor_assignments;
+drop policy if exists "ma_mentor_select" on public.mentor_assignments;
+drop policy if exists "ma_intern_select" on public.mentor_assignments;
+
+create policy "ma_admin_all" on public.mentor_assignments for all
+  using (public.is_admin()) with check (public.is_admin());
+
+-- A mentor can see spans where they are (or were) the mentor.
+create policy "ma_mentor_select" on public.mentor_assignments for select
+  using (mentor_id = public.current_app_user_id());
+
+-- An intern can see their own supervision history.
+create policy "ma_intern_select" on public.mentor_assignments for select
+  using (exists (
+    select 1 from public.internships i
+    where i.id = mentor_assignments.internship_id
+      and i.user_id = public.current_app_user_id()
+  ));
 
 -- ============================================================================
 -- AUTH INTEGRATION

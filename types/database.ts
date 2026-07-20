@@ -122,9 +122,22 @@ export interface InternshipRow {
   start_date: string;
   end_date: string | null;
   status: InternshipStatus;
+  notes: string | null;
   created_at: string;
   updated_at: string;
   deleted_at: string | null;
+}
+
+export interface MentorAssignmentRow {
+  id: string;
+  internship_id: string;
+  mentor_id: string;
+  assigned_by_id: string | null;
+  note: string | null;
+  started_at: string;
+  ended_at: string | null;
+  created_at: string;
+  updated_at: string;
 }
 
 export interface WeeklyReportRow {

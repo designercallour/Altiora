@@ -8,27 +8,46 @@
 
 import type {
   AppUser,
+  Cohort,
+  InternDetail,
   Internship,
   InternSummary,
   LearningIntelligence,
   Lookups,
+  MentorAssignment,
+  MentorAssignmentDetail,
   MentorFeedback,
+  MentorSummary,
   UserRole,
   WeeklyReport,
   WeeklyReportDetail,
 } from "@/types/domain";
 import type {
+  AssignMentorOptions,
+  CohortInput,
+  CohortUpdate,
   DataSource,
   FeedbackInput,
+  InternInput,
   InternQuery,
+  InternUpdate,
+  MentorInput,
+  MentorUpdate,
   ReportInput,
   ReportQuery,
   ReportUpdate,
 } from "@/services/data-source";
+import { internshipStatus } from "@/lib/internship";
 import { generateDataset, type MockDataset } from "./generate";
 
 const nowIso = () => new Date().toISOString();
 const clone = <T>(v: T): T => structuredClone(v);
+const slugify = (s: string) =>
+  s
+    .toLowerCase()
+    .trim()
+    .replace(/[^a-z0-9]+/g, "-")
+    .replace(/^-|-$/g, "");
 
 /** Sort helper: most recent ISO week first. */
 function byWeekDesc(a: WeeklyReport, b: WeeklyReport): number {
@@ -71,9 +90,12 @@ export class MockDataSource implements DataSource {
   }
 
   private summarize(intern: AppUser): InternSummary {
-    const internships = this.internshipsFor(intern.id);
+    // Most-recent internship by start date. Status is computed downstream from
+    // the period (ADR-0007), so we never rely on the stored `status` here.
     const internship =
-      internships.find((i) => i.status === "active") ?? internships[0] ?? null;
+      [...this.internshipsFor(intern.id)].sort((a, b) =>
+        b.startDate.localeCompare(a.startDate),
+      )[0] ?? null;
     const cohort =
       (internship &&
         this.db.cohorts.find((c) => c.id === internship.cohortId)) ??
@@ -183,10 +205,12 @@ export class MockDataSource implements DataSource {
   }
 
   async getActiveInternshipForUser(userId: string): Promise<Internship | null> {
-    const internships = this.internshipsFor(userId);
-    return clone(
-      internships.find((i) => i.status === "active") ?? internships[0] ?? null,
+    // The user's current engagement (most recent). Activity is decided by the
+    // caller via computed status, not the deprecated stored column.
+    const internships = this.internshipsFor(userId).sort((a, b) =>
+      b.startDate.localeCompare(a.startDate),
     );
+    return clone(internships[0] ?? null);
   }
 
   async listInternships(query: InternQuery = {}): Promise<Internship[]> {
@@ -198,6 +222,299 @@ export class MockDataSource implements DataSource {
     if (query.departmentId)
       items = items.filter((i) => i.departmentId === query.departmentId);
     return clone(items);
+  }
+
+  // ── cohorts ──────────────────────────────────────────────────────────────
+  async listCohorts(): Promise<Cohort[]> {
+    return clone(
+      this.db.cohorts
+        .filter((c) => c.deletedAt == null)
+        .sort((a, b) => b.startDate.localeCompare(a.startDate)),
+    );
+  }
+  async getCohortById(id: string): Promise<Cohort | null> {
+    return clone(
+      this.db.cohorts.find((c) => c.id === id && c.deletedAt == null) ?? null,
+    );
+  }
+  async createCohort(input: CohortInput): Promise<Cohort> {
+    const now = nowIso();
+    const cohort: Cohort = {
+      id: crypto.randomUUID(),
+      name: input.name,
+      slug: slugify(input.name),
+      description: input.description,
+      startDate: input.startDate,
+      endDate: input.endDate,
+      createdAt: now,
+      updatedAt: now,
+      deletedAt: null,
+    };
+    this.db.cohorts.push(cohort);
+    return clone(cohort);
+  }
+  async updateCohort(id: string, patch: CohortUpdate): Promise<Cohort> {
+    const c = this.db.cohorts.find((x) => x.id === id);
+    if (!c) throw new Error(`Cohort ${id} not found`);
+    if (patch.name !== undefined) {
+      c.name = patch.name;
+      c.slug = slugify(patch.name);
+    }
+    if (patch.description !== undefined) c.description = patch.description;
+    if (patch.startDate !== undefined) c.startDate = patch.startDate;
+    if (patch.endDate !== undefined) c.endDate = patch.endDate;
+    c.updatedAt = nowIso();
+    return clone(c);
+  }
+  async archiveCohort(id: string): Promise<void> {
+    const c = this.db.cohorts.find((x) => x.id === id);
+    if (c) c.deletedAt = nowIso();
+  }
+
+  // ── intern management ──────────────────────────────────────────────────────
+  async getInternDetail(internshipId: string): Promise<InternDetail | null> {
+    const internship = this.db.internships.find(
+      (i) => i.id === internshipId && i.deletedAt == null,
+    );
+    if (!internship) return null;
+    const user = this.db.users.find((u) => u.id === internship.userId);
+    if (!user) return null;
+    const cohort = internship.cohortId
+      ? (this.db.cohorts.find((c) => c.id === internship.cohortId) ?? null)
+      : null;
+    const m = internship.mentorId
+      ? (this.db.users.find((u) => u.id === internship.mentorId) ?? null)
+      : null;
+    const reports = this.activeReports()
+      .filter((r) => r.internshipId === internship.id)
+      .sort(byWeekDesc);
+    return clone({
+      user,
+      internship,
+      cohort,
+      mentor: m
+        ? { id: m.id, fullName: m.fullName, avatarUrl: m.avatarUrl }
+        : null,
+      assignments: await this.listMentorAssignments(internship.id),
+      submittedCount: reports.filter((r) => r.status === "submitted").length,
+      latestReport: reports[0] ?? null,
+    });
+  }
+  async createIntern(input: InternInput): Promise<InternSummary> {
+    const now = nowIso();
+    let user = this.db.users.find(
+      (u) =>
+        u.email.toLowerCase() === input.email.toLowerCase() &&
+        u.deletedAt == null,
+    );
+    if (!user) {
+      user = {
+        id: crypto.randomUUID(),
+        authId: null,
+        email: input.email,
+        fullName: input.fullName,
+        avatarUrl: null,
+        role: "intern",
+        createdAt: now,
+        updatedAt: now,
+        deletedAt: null,
+      };
+      this.db.users.push(user);
+    } else {
+      user.fullName = input.fullName;
+      user.role = "intern";
+      user.updatedAt = now;
+    }
+    const internship: Internship = {
+      id: crypto.randomUUID(),
+      userId: user.id,
+      mentorId: input.mentorId,
+      cohortId: input.cohortId,
+      departmentId: null,
+      teamId: null,
+      projectId: null,
+      position: input.position,
+      startDate: input.startDate,
+      endDate: input.endDate,
+      status: "active",
+      notes: input.notes,
+      createdAt: now,
+      updatedAt: now,
+      deletedAt: null,
+    };
+    this.db.internships.push(internship);
+    if (input.mentorId)
+      this.openAssignment(internship.id, input.mentorId, now, null, null);
+    return clone(this.summarize(user));
+  }
+  async updateIntern(
+    internshipId: string,
+    patch: InternUpdate,
+  ): Promise<InternSummary> {
+    const internship = this.db.internships.find((i) => i.id === internshipId);
+    if (!internship) throw new Error(`Internship ${internshipId} not found`);
+    const user = this.db.users.find((u) => u.id === internship.userId);
+    if (!user) throw new Error("intern user not found");
+    const now = nowIso();
+    if (patch.fullName !== undefined) user.fullName = patch.fullName;
+    if (patch.email !== undefined) user.email = patch.email;
+    user.updatedAt = now;
+    if (patch.cohortId !== undefined) internship.cohortId = patch.cohortId;
+    if (patch.startDate !== undefined) internship.startDate = patch.startDate;
+    if (patch.endDate !== undefined) internship.endDate = patch.endDate;
+    if (patch.position !== undefined) internship.position = patch.position;
+    if (patch.notes !== undefined) internship.notes = patch.notes;
+    if (patch.mentorId !== undefined && patch.mentorId !== internship.mentorId) {
+      if (patch.mentorId) await this.assignMentor(internshipId, patch.mentorId);
+      else internship.mentorId = null;
+    }
+    internship.updatedAt = now;
+    return clone(this.summarize(user));
+  }
+  async archiveIntern(internshipId: string): Promise<void> {
+    const internship = this.db.internships.find((i) => i.id === internshipId);
+    if (internship) internship.deletedAt = nowIso();
+  }
+
+  // ── mentor management ──────────────────────────────────────────────────────
+  async listMentors(): Promise<MentorSummary[]> {
+    const mentors = this.db.users.filter(
+      (u) => u.role === "mentor" && u.deletedAt == null,
+    );
+    const active = this.db.internships.filter((i) => i.deletedAt == null);
+    return clone(
+      mentors
+        .map((user) => {
+          const theirs = active.filter((i) => i.mentorId === user.id);
+          return {
+            user,
+            totalInternCount: theirs.length,
+            activeInternCount: theirs.filter(
+              (i) => internshipStatus(i) === "active",
+            ).length,
+          };
+        })
+        .sort((a, b) => b.activeInternCount - a.activeInternCount),
+    );
+  }
+  async getMentorById(id: string): Promise<AppUser | null> {
+    return clone(
+      this.db.users.find(
+        (u) => u.id === id && u.role === "mentor" && u.deletedAt == null,
+      ) ?? null,
+    );
+  }
+  async createMentor(input: MentorInput): Promise<MentorSummary> {
+    const now = nowIso();
+    let user = this.db.users.find(
+      (u) =>
+        u.email.toLowerCase() === input.email.toLowerCase() &&
+        u.deletedAt == null,
+    );
+    if (!user) {
+      user = {
+        id: crypto.randomUUID(),
+        authId: null,
+        email: input.email,
+        fullName: input.fullName,
+        avatarUrl: null,
+        role: "mentor",
+        createdAt: now,
+        updatedAt: now,
+        deletedAt: null,
+      };
+      this.db.users.push(user);
+    } else {
+      user.fullName = input.fullName;
+      user.role = "mentor";
+      user.updatedAt = now;
+    }
+    return clone({ user, activeInternCount: 0, totalInternCount: 0 });
+  }
+  async updateMentor(id: string, patch: MentorUpdate): Promise<MentorSummary> {
+    const user = this.db.users.find((u) => u.id === id);
+    if (!user) throw new Error(`Mentor ${id} not found`);
+    if (patch.fullName !== undefined) user.fullName = patch.fullName;
+    if (patch.email !== undefined) user.email = patch.email;
+    user.updatedAt = nowIso();
+    const theirs = this.db.internships.filter(
+      (i) => i.mentorId === id && i.deletedAt == null,
+    );
+    return clone({
+      user,
+      totalInternCount: theirs.length,
+      activeInternCount: theirs.filter((i) => internshipStatus(i) === "active")
+        .length,
+    });
+  }
+  async archiveMentor(id: string): Promise<void> {
+    const user = this.db.users.find((u) => u.id === id);
+    if (user) user.deletedAt = nowIso();
+  }
+
+  // ── mentor assignment (with history) ────────────────────────────────────────
+  private openAssignment(
+    internshipId: string,
+    mentorId: string,
+    at: string,
+    assignedById: string | null,
+    note: string | null,
+  ) {
+    const a: MentorAssignment = {
+      id: crypto.randomUUID(),
+      internshipId,
+      mentorId,
+      assignedById,
+      note,
+      startedAt: at,
+      endedAt: null,
+      createdAt: at,
+      updatedAt: at,
+    };
+    this.db.mentorAssignments.push(a);
+  }
+  async assignMentor(
+    internshipId: string,
+    mentorId: string,
+    opts: AssignMentorOptions = {},
+  ): Promise<void> {
+    const internship = this.db.internships.find((i) => i.id === internshipId);
+    if (!internship) throw new Error(`Internship ${internshipId} not found`);
+    if (internship.mentorId === mentorId) return;
+    const now = nowIso();
+    this.db.mentorAssignments
+      .filter((a) => a.internshipId === internshipId && a.endedAt == null)
+      .forEach((a) => {
+        a.endedAt = now;
+        a.updatedAt = now;
+      });
+    this.openAssignment(
+      internshipId,
+      mentorId,
+      now,
+      opts.assignedById ?? null,
+      opts.note ?? null,
+    );
+    internship.mentorId = mentorId;
+    internship.updatedAt = now;
+  }
+  async listMentorAssignments(
+    internshipId: string,
+  ): Promise<MentorAssignmentDetail[]> {
+    return clone(
+      this.db.mentorAssignments
+        .filter((a) => a.internshipId === internshipId)
+        .sort((a, b) => b.startedAt.localeCompare(a.startedAt))
+        .map((a) => {
+          const m = this.db.users.find((u) => u.id === a.mentorId);
+          return {
+            ...a,
+            mentor: m
+              ? { id: m.id, fullName: m.fullName, avatarUrl: m.avatarUrl }
+              : null,
+          };
+        }),
+    );
   }
 
   // ── reports ────────────────────────────────────────────────────────────────

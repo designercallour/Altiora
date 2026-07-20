@@ -267,6 +267,83 @@ semantics (links navigate, buttons act) without visual divergence.
 
 ---
 
+## Internship Program Management (post-MVP)
+
+A full program-management capability was built on top of the reflection MVP,
+treating the internship lifecycle as a first-class domain. It shipped in three
+phases and is complete.
+
+### Features implemented
+
+- **Computed internship status (single source of truth).** Active/Inactive is
+  derived purely from the internship period at read time — never stored, never
+  manually edited. All logic lives in [`lib/internship.ts`](../lib/internship.ts)
+  (`internshipLifecycle`, `internshipStatus`, `isInternshipActive`,
+  `endsWithinDays`), surfaced by one component,
+  [`status-chip.tsx`](../components/shared/status-chip.tsx). See ADR-0007.
+- **Lifecycle access control.** Inactive interns are gated **server-side** (in the
+  `(app)` layout and the report-submit action) to a premium
+  `/internship-complete` page; admins and mentors are never gated.
+- **Intern management** — full CRUD with search + cohort + status filters.
+  Onboarding creates the user + internship and (in Supabase mode) grants login via
+  the allowlist. Optional per-intern notes.
+- **Mentor management** — CRUD with live active/total workload counts; a guard
+  blocks removing a mentor who still has active interns.
+- **Cohort management** — first-class CRUD with per-cohort intern counts.
+- **Mentor assignment with preserved history.** One active mentor per intern,
+  reassignable, every span retained for audit. Assignable from **both** the intern
+  detail page and the mentor detail page. Current mentor is a fast indexed pointer
+  (`internships.mentor_id`); history lives in `mentor_assignments`; a partial
+  unique index guarantees exactly one open span. See ADR-0009.
+- **Dashboards overhauled.** Admin: organization health — active/inactive interns,
+  active mentors, avg interns per mentor, ending-within-7-days, reflection rate,
+  needs-attention (missed last week), recently added, mentor workload — alongside
+  the existing learning intelligence. Mentor: scoped to own interns plus a
+  "wrapping up soon" signal. Intern: an internship-period card with a progress bar,
+  weeks remaining, and their mentor.
+- **Extensible notification architecture** — typed events + pluggable channels
+  ([`lib/notifications.ts`](../lib/notifications.ts)); dispatched on assign/reassign.
+  No-op channel today; in-app/email drop in with no call-site changes. See ADR-0008.
+
+### Database / schema changes
+
+- **`supabase/migrations/0003_mentor_assignments.sql`** (additive, idempotent):
+  adds `internships.notes`; creates `mentor_assignments` (with a partial unique
+  index enforcing one open span per internship, RLS policies, an `updated_at`
+  trigger); and backfills an open span for every already-mentored internship.
+- Mirrored into the canonical [`supabase/schema.sql`](../supabase/schema.sql) and
+  the row types in [`types/database.ts`](../types/database.ts). RLS now covers all
+  15 tables.
+
+### New routes
+
+`/admin/interns`, `/admin/mentors`, `/admin/mentors/[id]`, `/admin/cohorts`
+(admin-only via `app/(app)/admin/layout.tsx`), plus an admin management panel
+added to `/interns/[id]`. Nav gains admin-only Interns / Mentors / Cohorts entries.
+
+### Architecture decisions
+
+- **ADR-0007** — computed internship status.
+- **ADR-0008** — event + channel notification architecture.
+- **ADR-0009** — mentor assignment: current pointer + history table.
+
+### Verification
+
+`pnpm typecheck`, `pnpm lint` (0 errors), and `pnpm build` all pass. The end-to-end
+flow was exercised in mock mode: admin sign-in → interns list with computed status
+chips → create/edit intern → assign/reassign mentor with history → mentor & cohort
+management → all three dashboards.
+
+### Remaining TODOs / manual steps
+
+- **Run the migration.** Execute
+  [`supabase/migrations/0003_mentor_assignments.sql`](../supabase/migrations/0003_mentor_assignments.sql)
+  in the Supabase SQL editor before switching that environment to `supabase` mode.
+  It is additive and safe to run on production.
+- No code TODOs outstanding for this capability.
+
+---
+
 ## Future roadmap
 
 1. **Implement `SupabaseDataSource`** and **connect Google OAuth** — flip

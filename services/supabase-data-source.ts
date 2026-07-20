@@ -12,9 +12,16 @@
 
 import { createClient } from "@/supabase/server";
 import type {
+  AssignMentorOptions,
+  CohortInput,
+  CohortUpdate,
   DataSource,
   FeedbackInput,
+  InternInput,
   InternQuery,
+  InternUpdate,
+  MentorInput,
+  MentorUpdate,
   ReportInput,
   ReportQuery,
   ReportUpdate,
@@ -26,6 +33,7 @@ import type {
   LearningCategoryRow,
   LearningLogRow,
   LearningSourceRow,
+  MentorAssignmentRow,
   MentorFeedbackRow,
   ProjectRow,
   SkillCategoryRow,
@@ -41,6 +49,7 @@ import type {
   Department,
   ExtractedConcept,
   ExtractedSkill,
+  InternDetail,
   Internship,
   InternSummary,
   LearningCategory,
@@ -48,7 +57,10 @@ import type {
   LearningLog,
   LearningSource,
   Lookups,
+  MentorAssignment,
+  MentorAssignmentDetail,
   MentorFeedback,
+  MentorSummary,
   Project,
   Skill,
   SkillCategory,
@@ -58,6 +70,7 @@ import type {
   WeeklyReportDetail,
   WeeklySkillScore,
 } from "@/types/domain";
+import { internshipStatus } from "@/lib/internship";
 
 interface ReportIntelligenceRow {
   report_id: string;
@@ -189,9 +202,22 @@ const toInternship = (r: InternshipRow): Internship => ({
   startDate: r.start_date,
   endDate: r.end_date,
   status: r.status,
+  notes: r.notes,
   createdAt: r.created_at,
   updatedAt: r.updated_at,
   deletedAt: r.deleted_at,
+});
+
+const toMentorAssignment = (r: MentorAssignmentRow): MentorAssignment => ({
+  id: r.id,
+  internshipId: r.internship_id,
+  mentorId: r.mentor_id,
+  assignedById: r.assigned_by_id,
+  note: r.note,
+  startedAt: r.started_at,
+  endedAt: r.ended_at,
+  createdAt: r.created_at,
+  updatedAt: r.updated_at,
 });
 
 const toReport = (r: WeeklyReportRow): WeeklyReport => ({
@@ -284,6 +310,13 @@ function hydrate(r: ReportRowWithChildren): WeeklyReportDetail {
 function byWeekDesc(a: { year: number; weekNumber: number }, b: typeof a) {
   return b.year - a.year || b.weekNumber - a.weekNumber;
 }
+
+const slugify = (s: string) =>
+  s
+    .toLowerCase()
+    .trim()
+    .replace(/[^a-z0-9]+/g, "-")
+    .replace(/^-|-$/g, "");
 
 // snake_case payloads for writes
 function reportScalars(v: ReportUpdate) {
@@ -531,6 +564,438 @@ export class SupabaseDataSource implements DataSource {
     if (query.departmentId) q = q.eq("department_id", query.departmentId);
     const { data } = await q;
     return ((data ?? []) as InternshipRow[]).map(toInternship);
+  }
+
+  // ── cohorts ──────────────────────────────────────────────────────────────
+  async listCohorts(): Promise<Cohort[]> {
+    const supabase = await this.db();
+    const { data } = await supabase
+      .from("cohorts")
+      .select("*")
+      .is("deleted_at", null)
+      .order("start_date", { ascending: false });
+    return ((data ?? []) as CohortRow[]).map(toCohort);
+  }
+
+  async getCohortById(id: string): Promise<Cohort | null> {
+    const supabase = await this.db();
+    const { data } = await supabase
+      .from("cohorts")
+      .select("*")
+      .eq("id", id)
+      .is("deleted_at", null)
+      .maybeSingle();
+    return data ? toCohort(data as CohortRow) : null;
+  }
+
+  async createCohort(input: CohortInput): Promise<Cohort> {
+    const supabase = await this.db();
+    const { data, error } = await supabase
+      .from("cohorts")
+      .insert({
+        name: input.name,
+        slug: slugify(input.name),
+        description: input.description,
+        start_date: input.startDate,
+        end_date: input.endDate,
+      })
+      .select("*")
+      .single();
+    if (error || !data)
+      throw new Error(error?.message ?? "Failed to create cohort");
+    return toCohort(data as CohortRow);
+  }
+
+  async updateCohort(id: string, patch: CohortUpdate): Promise<Cohort> {
+    const supabase = await this.db();
+    const payload: Record<string, unknown> = {};
+    if (patch.name !== undefined) {
+      payload.name = patch.name;
+      payload.slug = slugify(patch.name);
+    }
+    if (patch.description !== undefined) payload.description = patch.description;
+    if (patch.startDate !== undefined) payload.start_date = patch.startDate;
+    if (patch.endDate !== undefined) payload.end_date = patch.endDate;
+    const { data, error } = await supabase
+      .from("cohorts")
+      .update(payload)
+      .eq("id", id)
+      .select("*")
+      .single();
+    if (error || !data)
+      throw new Error(error?.message ?? `Cohort ${id} not found`);
+    return toCohort(data as CohortRow);
+  }
+
+  async archiveCohort(id: string): Promise<void> {
+    const supabase = await this.db();
+    await supabase
+      .from("cohorts")
+      .update({ deleted_at: new Date().toISOString() })
+      .eq("id", id);
+  }
+
+  // ── intern management ──────────────────────────────────────────────────────
+  async getInternDetail(internshipId: string): Promise<InternDetail | null> {
+    const supabase = await this.db();
+    const { data: internshipRow } = await supabase
+      .from("internships")
+      .select("*")
+      .eq("id", internshipId)
+      .is("deleted_at", null)
+      .maybeSingle();
+    if (!internshipRow) return null;
+    const internship = toInternship(internshipRow as InternshipRow);
+
+    const [userRes, cohortRes, mentorRes, reportsRes, assignments] =
+      await Promise.all([
+        supabase
+          .from("users")
+          .select("*")
+          .eq("id", internship.userId)
+          .maybeSingle(),
+        internship.cohortId
+          ? supabase
+              .from("cohorts")
+              .select("*")
+              .eq("id", internship.cohortId)
+              .maybeSingle()
+          : Promise.resolve({ data: null }),
+        internship.mentorId
+          ? supabase
+              .from("users")
+              .select("*")
+              .eq("id", internship.mentorId)
+              .maybeSingle()
+          : Promise.resolve({ data: null }),
+        supabase
+          .from("weekly_reports")
+          .select("*")
+          .eq("internship_id", internship.id)
+          .is("deleted_at", null),
+        this.listMentorAssignments(internship.id),
+      ]);
+    if (!userRes.data) return null;
+    const mentorUser = mentorRes.data
+      ? toUser(mentorRes.data as UserRow)
+      : null;
+    const reports = ((reportsRes.data ?? []) as WeeklyReportRow[])
+      .map(toReport)
+      .sort(byWeekDesc);
+    return {
+      user: toUser(userRes.data as UserRow),
+      internship,
+      cohort: cohortRes.data ? toCohort(cohortRes.data as CohortRow) : null,
+      mentor: mentorUser
+        ? {
+            id: mentorUser.id,
+            fullName: mentorUser.fullName,
+            avatarUrl: mentorUser.avatarUrl,
+          }
+        : null,
+      assignments,
+      submittedCount: reports.filter((r) => r.status === "submitted").length,
+      latestReport: reports[0] ?? null,
+    };
+  }
+
+  private async upsertUserByEmail(
+    email: string,
+    fullName: string,
+    role: UserRole,
+  ): Promise<AppUser> {
+    const supabase = await this.db();
+    const { data: existing } = await supabase
+      .from("users")
+      .select("*")
+      .ilike("email", email)
+      .is("deleted_at", null)
+      .maybeSingle();
+    if (existing) {
+      const { data, error } = await supabase
+        .from("users")
+        .update({ full_name: fullName, role })
+        .eq("id", (existing as UserRow).id)
+        .select("*")
+        .single();
+      if (error || !data)
+        throw new Error(error?.message ?? "Failed to update user");
+      return toUser(data as UserRow);
+    }
+    const { data, error } = await supabase
+      .from("users")
+      .insert({ email, full_name: fullName, role })
+      .select("*")
+      .single();
+    if (error || !data)
+      throw new Error(error?.message ?? "Failed to create user");
+    return toUser(data as UserRow);
+  }
+
+  async createIntern(input: InternInput): Promise<InternSummary> {
+    const supabase = await this.db();
+    const user = await this.upsertUserByEmail(
+      input.email,
+      input.fullName,
+      "intern",
+    );
+    // Grant login access via the allowlist (idempotent).
+    await supabase
+      .from("allowed_emails")
+      .upsert({ email: input.email, role: "intern" }, { onConflict: "email" });
+    const { data, error } = await supabase
+      .from("internships")
+      .insert({
+        user_id: user.id,
+        mentor_id: input.mentorId,
+        cohort_id: input.cohortId,
+        position: input.position,
+        start_date: input.startDate,
+        end_date: input.endDate,
+        status: "active",
+        notes: input.notes,
+      })
+      .select("id")
+      .single();
+    if (error || !data)
+      throw new Error(error?.message ?? "Failed to create internship");
+    const internshipId = (data as { id: string }).id;
+    if (input.mentorId) {
+      await this.openAssignment(internshipId, input.mentorId, null, null);
+    }
+    const detail = await this.getInternDetail(internshipId);
+    return this.summaryFromDetail(detail);
+  }
+
+  async updateIntern(
+    internshipId: string,
+    patch: InternUpdate,
+  ): Promise<InternSummary> {
+    const supabase = await this.db();
+    const internship = await this.getInternshipById(internshipId);
+    if (!internship) throw new Error(`Internship ${internshipId} not found`);
+
+    if (patch.fullName !== undefined || patch.email !== undefined) {
+      const userPatch: Record<string, unknown> = {};
+      if (patch.fullName !== undefined) userPatch.full_name = patch.fullName;
+      if (patch.email !== undefined) userPatch.email = patch.email;
+      await supabase
+        .from("users")
+        .update(userPatch)
+        .eq("id", internship.userId);
+    }
+
+    const internPatch: Record<string, unknown> = {};
+    if (patch.cohortId !== undefined) internPatch.cohort_id = patch.cohortId;
+    if (patch.startDate !== undefined) internPatch.start_date = patch.startDate;
+    if (patch.endDate !== undefined) internPatch.end_date = patch.endDate;
+    if (patch.position !== undefined) internPatch.position = patch.position;
+    if (patch.notes !== undefined) internPatch.notes = patch.notes;
+    if (Object.keys(internPatch).length) {
+      await supabase
+        .from("internships")
+        .update(internPatch)
+        .eq("id", internshipId);
+    }
+
+    if (patch.mentorId !== undefined && patch.mentorId !== internship.mentorId) {
+      if (patch.mentorId) await this.assignMentor(internshipId, patch.mentorId);
+      else {
+        await supabase
+          .from("mentor_assignments")
+          .update({ ended_at: new Date().toISOString() })
+          .eq("internship_id", internshipId)
+          .is("ended_at", null);
+        await supabase
+          .from("internships")
+          .update({ mentor_id: null })
+          .eq("id", internshipId);
+      }
+    }
+
+    const detail = await this.getInternDetail(internshipId);
+    return this.summaryFromDetail(detail);
+  }
+
+  async archiveIntern(internshipId: string): Promise<void> {
+    const supabase = await this.db();
+    await supabase
+      .from("internships")
+      .update({ deleted_at: new Date().toISOString() })
+      .eq("id", internshipId);
+  }
+
+  private summaryFromDetail(detail: InternDetail | null): InternSummary {
+    if (!detail) throw new Error("Intern vanished after write");
+    return {
+      user: detail.user,
+      internship: detail.internship,
+      cohort: detail.cohort,
+      department: null,
+      mentor: detail.mentor,
+      latestReport: detail.latestReport,
+      submittedCount: detail.submittedCount,
+      needsReview: false,
+    };
+  }
+
+  // ── mentor management ──────────────────────────────────────────────────────
+  async listMentors(): Promise<MentorSummary[]> {
+    const supabase = await this.db();
+    const [mentorsRes, internshipsRes] = await Promise.all([
+      supabase
+        .from("users")
+        .select("*")
+        .eq("role", "mentor")
+        .is("deleted_at", null),
+      supabase.from("internships").select("*").is("deleted_at", null),
+    ]);
+    const internships = ((internshipsRes.data ?? []) as InternshipRow[]).map(
+      toInternship,
+    );
+    return ((mentorsRes.data ?? []) as UserRow[])
+      .map(toUser)
+      .map((user) => {
+        const theirs = internships.filter((i) => i.mentorId === user.id);
+        return {
+          user,
+          totalInternCount: theirs.length,
+          activeInternCount: theirs.filter(
+            (i) => internshipStatus(i) === "active",
+          ).length,
+        };
+      })
+      .sort((a, b) => b.activeInternCount - a.activeInternCount);
+  }
+
+  async getMentorById(id: string): Promise<AppUser | null> {
+    const supabase = await this.db();
+    const { data } = await supabase
+      .from("users")
+      .select("*")
+      .eq("id", id)
+      .eq("role", "mentor")
+      .is("deleted_at", null)
+      .maybeSingle();
+    return data ? toUser(data as UserRow) : null;
+  }
+
+  async createMentor(input: MentorInput): Promise<MentorSummary> {
+    const supabase = await this.db();
+    const user = await this.upsertUserByEmail(
+      input.email,
+      input.fullName,
+      "mentor",
+    );
+    await supabase
+      .from("allowed_emails")
+      .upsert({ email: input.email, role: "mentor" }, { onConflict: "email" });
+    return { user, activeInternCount: 0, totalInternCount: 0 };
+  }
+
+  async updateMentor(id: string, patch: MentorUpdate): Promise<MentorSummary> {
+    const supabase = await this.db();
+    const userPatch: Record<string, unknown> = {};
+    if (patch.fullName !== undefined) userPatch.full_name = patch.fullName;
+    if (patch.email !== undefined) userPatch.email = patch.email;
+    if (Object.keys(userPatch).length) {
+      await supabase.from("users").update(userPatch).eq("id", id);
+    }
+    const { data } = await supabase
+      .from("internships")
+      .select("*")
+      .eq("mentor_id", id)
+      .is("deleted_at", null);
+    const theirs = ((data ?? []) as InternshipRow[]).map(toInternship);
+    const user = await this.getUserById(id);
+    if (!user) throw new Error(`Mentor ${id} not found`);
+    return {
+      user,
+      totalInternCount: theirs.length,
+      activeInternCount: theirs.filter((i) => internshipStatus(i) === "active")
+        .length,
+    };
+  }
+
+  async archiveMentor(id: string): Promise<void> {
+    const supabase = await this.db();
+    await supabase
+      .from("users")
+      .update({ deleted_at: new Date().toISOString() })
+      .eq("id", id);
+  }
+
+  // ── mentor assignment (with history) ────────────────────────────────────────
+  private async openAssignment(
+    internshipId: string,
+    mentorId: string,
+    assignedById: string | null,
+    note: string | null,
+  ): Promise<void> {
+    const supabase = await this.db();
+    await supabase.from("mentor_assignments").insert({
+      internship_id: internshipId,
+      mentor_id: mentorId,
+      assigned_by_id: assignedById,
+      note,
+    });
+  }
+
+  async assignMentor(
+    internshipId: string,
+    mentorId: string,
+    opts: AssignMentorOptions = {},
+  ): Promise<void> {
+    const supabase = await this.db();
+    const internship = await this.getInternshipById(internshipId);
+    if (!internship) throw new Error(`Internship ${internshipId} not found`);
+    if (internship.mentorId === mentorId) return;
+    await supabase
+      .from("mentor_assignments")
+      .update({ ended_at: new Date().toISOString() })
+      .eq("internship_id", internshipId)
+      .is("ended_at", null);
+    await this.openAssignment(
+      internshipId,
+      mentorId,
+      opts.assignedById ?? null,
+      opts.note ?? null,
+    );
+    await supabase
+      .from("internships")
+      .update({ mentor_id: mentorId })
+      .eq("id", internshipId);
+  }
+
+  async listMentorAssignments(
+    internshipId: string,
+  ): Promise<MentorAssignmentDetail[]> {
+    const supabase = await this.db();
+    const { data } = await supabase
+      .from("mentor_assignments")
+      .select("*")
+      .eq("internship_id", internshipId)
+      .order("started_at", { ascending: false });
+    const rows = ((data ?? []) as MentorAssignmentRow[]).map(toMentorAssignment);
+    const mentorIds = [...new Set(rows.map((r) => r.mentorId))];
+    const mentorsById = new Map<string, AppUser>();
+    if (mentorIds.length) {
+      const { data: mentors } = await supabase
+        .from("users")
+        .select("*")
+        .in("id", mentorIds);
+      for (const m of ((mentors ?? []) as UserRow[]).map(toUser))
+        mentorsById.set(m.id, m);
+    }
+    return rows.map((a) => {
+      const m = mentorsById.get(a.mentorId);
+      return {
+        ...a,
+        mentor: m
+          ? { id: m.id, fullName: m.fullName, avatarUrl: m.avatarUrl }
+          : null,
+      } satisfies MentorAssignmentDetail;
+    });
   }
 
   // ── reports ────────────────────────────────────────────────────────────────

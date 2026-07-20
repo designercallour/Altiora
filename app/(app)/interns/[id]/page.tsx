@@ -23,6 +23,7 @@ import { LinkButton } from "@/components/shared/link-button";
 import { BarList } from "@/components/shared/bar-list";
 import { TrendChart } from "@/components/charts/trend-chart";
 import { Reveal, Stagger, StaggerItem } from "@/components/shared/motion";
+import { InternAdminPanel } from "@/features/admin/components/intern-admin-panel";
 import { moodLevel } from "@/lib/domain";
 import { formatDate, round1 } from "@/lib/format";
 import { ROUTES } from "@/lib/constants";
@@ -56,10 +57,13 @@ export default async function InternProfilePage({
     internship.userId === user.id;
   if (!allowed) notFound();
 
-  const [intern, details, lookups] = await Promise.all([
+  const isAdmin = user.role === "admin";
+  const [intern, details, lookups, adminDetail, mentors] = await Promise.all([
     db.getUserById(internship.userId),
     db.listReportDetails({ internshipId: id }),
     db.getLookups(),
+    isAdmin ? db.getInternDetail(id) : Promise.resolve(null),
+    isAdmin ? db.listMentors() : Promise.resolve([]),
   ]);
 
   const cohort = lookups.cohorts.find((c) => c.id === internship.cohortId);
@@ -96,6 +100,18 @@ export default async function InternProfilePage({
           }
         />
       </Reveal>
+
+      {isAdmin && adminDetail ? (
+        <div className="mt-6">
+          <Reveal delay={0.03}>
+            <InternAdminPanel
+              detail={adminDetail}
+              cohorts={lookups.cohorts}
+              mentors={mentors}
+            />
+          </Reveal>
+        </div>
+      ) : null}
 
       {submitted.length === 0 ? (
         <div className="mt-8">
