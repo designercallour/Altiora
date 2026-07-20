@@ -82,6 +82,17 @@ export async function InternDashboard({ user }: { user: AppUser }) {
   );
   const reflectedThisWeek = current?.status === "submitted";
 
+  // If a reminder for THIS week is already showing, it's the single CTA — so
+  // suppress the generic "time to reflect" nudge to avoid a duplicate prompt.
+  const hasCurrentWeekReminder = reminders.some((n) => {
+    const p = n.payload as { year?: number; weekNumber?: number };
+    return (
+      n.type === "reflection_overdue" &&
+      p.year === cw.year &&
+      p.weekNumber === cw.week
+    );
+  });
+
   const averages = reportAverages(details);
   const learnings = totalLearnings(details);
 
@@ -122,8 +133,11 @@ export async function InternDashboard({ user }: { user: AppUser }) {
         </div>
       ) : null}
 
-      {/* This-week nudge — only from Friday 09:00 WIB through Sunday. */}
-      {!reflectedThisWeek && isWeeklyReflectionOpen(now) ? (
+      {/* This-week nudge — only Fri 09:00 WIB→Sun, and only when a current-week
+          reminder banner isn't already the CTA. */}
+      {!reflectedThisWeek &&
+      isWeeklyReflectionOpen(now) &&
+      !hasCurrentWeekReminder ? (
         <Reveal delay={0.04}>
           <Card className="border-primary/30 bg-primary/[0.03] mt-8">
             <CardContent className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
