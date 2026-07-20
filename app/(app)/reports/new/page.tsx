@@ -3,7 +3,13 @@ import { redirect } from "next/navigation";
 import { NotebookPen } from "lucide-react";
 import { getCurrentUser } from "@/lib/session";
 import { getDataSource } from "@/services";
-import { weekRange, formatWeekLabel, isWeeklyReflectionOpen } from "@/lib/week";
+import {
+  weekRange,
+  weekRangeOf,
+  weekKey,
+  formatWeekLabel,
+  isWeeklyReflectionOpen,
+} from "@/lib/week";
 import { PageContainer } from "@/components/shared/page-container";
 import { PageHeader } from "@/components/shared/page-header";
 import { EmptyState } from "@/components/shared/empty-state";
@@ -17,7 +23,11 @@ import { ROUTES } from "@/lib/constants";
 
 export const metadata: Metadata = { title: "New Weekly Report" };
 
-export default async function NewReportPage() {
+export default async function NewReportPage({
+  searchParams,
+}: {
+  searchParams: Promise<{ year?: string; week?: string }>;
+}) {
   const db = getDataSource();
   const user = await getCurrentUser();
   const internship = user ? await db.getActiveInternshipForUser(user.id) : null;
@@ -41,12 +51,30 @@ export default async function NewReportPage() {
   }
 
   const now = new Date();
-  const range = weekRange(now);
+  const current = weekRange(now);
 
-  // The weekly reflection is an end-of-week ritual: it only opens Friday 09:00
-  // WIB through Sunday. Before then the form is locked (enforced server-side in
-  // the save/submit actions too).
-  if (!isWeeklyReflectionOpen(now)) {
+  // A `?year&week` override lets an intern file a past-week catch-up (e.g. the
+  // one-time Week 29 reflection) — a past week within their internship. Past
+  // weeks are always open; the Friday window only gates the current week.
+  const y = Number((await searchParams).year);
+  const w = Number((await searchParams).week);
+  let range = current;
+  let isCatchUp = false;
+  if (Number.isInteger(y) && Number.isInteger(w) && w >= 1 && w <= 53) {
+    const target = weekRangeOf(y, w);
+    const isPast =
+      weekKey(target.year, target.week) < weekKey(current.year, current.week);
+    const withinInternship = target.endDate >= internship.startDate;
+    if (isPast && withinInternship) {
+      range = target;
+      isCatchUp = true;
+    }
+  }
+
+  // The current week's reflection is an end-of-week ritual: it only opens Friday
+  // 09:00 WIB through Sunday. Before then the form is locked (also enforced
+  // server-side in the save/submit actions). Catch-up (past) weeks stay open.
+  if (!isCatchUp && !isWeeklyReflectionOpen(now)) {
     return (
       <PageContainer size="narrow">
         <PageHeader

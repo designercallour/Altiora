@@ -28,43 +28,52 @@ export function ReminderBanner({
 
   return (
     <div className="space-y-2">
-      {visible.map((n) => (
-        <div
-          key={n.id}
-          className="border-primary/30 bg-primary/[0.04] flex items-start gap-3 rounded-xl border p-4"
-          role="status"
-        >
-          <span className="bg-primary/10 text-primary mt-0.5 flex size-8 shrink-0 items-center justify-center rounded-lg">
-            <Bell className="size-4" />
-          </span>
-          <div className="min-w-0 flex-1">
-            <p className="text-sm font-medium">{n.title}</p>
-            {n.body ? (
-              <p className="text-muted-foreground text-sm">{n.body}</p>
-            ) : null}
-          </div>
-          <div className="flex shrink-0 items-center gap-1">
-            {n.type === "reflection_overdue" ? (
+      {visible.map((n) => {
+        // Point "Start" at the reminder's specific week (e.g. the Week 29
+        // catch-up), falling back to the current-week form.
+        const p = n.payload as { year?: number; weekNumber?: number };
+        const startHref =
+          p.year && p.weekNumber
+            ? `${ROUTES.newReport}?year=${p.year}&week=${p.weekNumber}`
+            : ROUTES.newReport;
+        return (
+          <div
+            key={n.id}
+            className="border-primary/30 bg-primary/[0.04] flex items-start gap-3 rounded-xl border p-4"
+            role="status"
+          >
+            <span className="bg-primary/10 text-primary mt-0.5 flex size-8 shrink-0 items-center justify-center rounded-lg">
+              <Bell className="size-4" />
+            </span>
+            <div className="min-w-0 flex-1">
+              <p className="text-sm font-medium">{n.title}</p>
+              {n.body ? (
+                <p className="text-muted-foreground text-sm">{n.body}</p>
+              ) : null}
+            </div>
+            <div className="flex shrink-0 items-center gap-1">
+              {n.type === "reflection_overdue" ? (
+                <Button
+                  size="sm"
+                  nativeButton={false}
+                  render={<Link href={startHref} />}
+                >
+                  Start
+                  <ArrowRight />
+                </Button>
+              ) : null}
               <Button
-                size="sm"
-                nativeButton={false}
-                render={<Link href={ROUTES.newReport} />}
+                variant="ghost"
+                size="icon-sm"
+                aria-label="Dismiss reminder"
+                onClick={() => dismiss(n.id)}
               >
-                Start
-                <ArrowRight />
+                <X />
               </Button>
-            ) : null}
-            <Button
-              variant="ghost"
-              size="icon-sm"
-              aria-label="Dismiss reminder"
-              onClick={() => dismiss(n.id)}
-            >
-              <X />
-            </Button>
+            </div>
           </div>
-        </div>
-      ))}
+        );
+      })}
     </div>
   );
 }
