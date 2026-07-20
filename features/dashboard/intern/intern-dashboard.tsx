@@ -11,6 +11,7 @@ import {
 import { getDataSource } from "@/services";
 import { weekRange } from "@/lib/week";
 import { internshipLifecycle } from "@/lib/internship";
+import { ReminderBanner } from "@/features/notifications/components/reminder-banner";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { PageContainer } from "@/components/shared/page-container";
 import { PageHeader } from "@/components/shared/page-header";
@@ -65,11 +66,12 @@ export async function InternDashboard({ user }: { user: AppUser }) {
     );
   }
 
-  const [details, mentor] = await Promise.all([
+  const [details, mentor, reminders] = await Promise.all([
     db.listReportDetails({ internshipId: internship.id }),
     internship.mentorId
       ? db.getUserById(internship.mentorId)
       : Promise.resolve(null),
+    db.listNotifications(user.id, { unreadOnly: true }),
   ]);
   const life = internshipLifecycle(internship, now);
 
@@ -113,6 +115,12 @@ export async function InternDashboard({ user }: { user: AppUser }) {
           }
         />
       </Reveal>
+
+      {reminders.length > 0 ? (
+        <div className="mt-6">
+          <ReminderBanner notifications={reminders} />
+        </div>
+      ) : null}
 
       {/* This-week nudge */}
       {!reflectedThisWeek ? (
