@@ -1033,23 +1033,30 @@ export class SupabaseDataSource implements DataSource {
       payload: input.payload ?? {},
       dedupe_key: input.dedupeKey ?? null,
     };
+    // Idempotency via check-then-insert. (We can't use PostgREST upsert here:
+    // the dedupe index is partial — `where dedupe_key is not null` — which
+    // ON CONFLICT column lists cannot target.) The partial unique index is kept
+    // as a DB safety net; a concurrent-race unique violation (23505) is treated
+    // as "already sent".
     if (input.dedupeKey) {
-      // Idempotent: skip if this recipient already has this keyed notification.
-      const { data, error } = await supabase
+      const { data: existing } = await supabase
         .from("notifications")
-        .upsert(row, { onConflict: "recipient_id,dedupe_key", ignoreDuplicates: true })
-        .select("*");
-      if (error) throw new Error(error.message);
-      const created = (data ?? []) as NotificationRow[];
-      return created[0] ? toNotification(created[0]) : null;
+        .select("id")
+        .eq("recipient_id", input.recipientId)
+        .eq("dedupe_key", input.dedupeKey)
+        .maybeSingle();
+      if (existing) return null;
     }
     const { data, error } = await supabase
       .from("notifications")
       .insert(row)
       .select("*")
       .single();
-    if (error || !data)
-      throw new Error(error?.message ?? "Failed to create notification");
+    if (error) {
+      if ((error as { code?: string }).code === "23505") return null; // raced
+      throw new Error(error.message);
+    }
+    if (!data) throw new Error("Failed to create notification");
     return toNotification(data as NotificationRow);
   }
 
