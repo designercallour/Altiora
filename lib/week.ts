@@ -4,6 +4,7 @@ import {
   format,
   getISOWeek,
   getISOWeekYear,
+  setISOWeek,
   startOfISOWeek,
 } from "date-fns";
 
@@ -41,6 +42,13 @@ export function weekRange(date: Date = new Date()): WeekRange {
 /** Range for the ISO week `offset` weeks from `date` (negative = past). */
 export function weekRangeFrom(date: Date, offset: number): WeekRange {
   return weekRange(addWeeks(date, offset));
+}
+
+/** Range for a specific ISO week (e.g. year 2026, week 29). */
+export function weekRangeOf(year: number, week: number): WeekRange {
+  // Jan 4 is always in ISO week 1 of its ISO year — a safe anchor.
+  const anchor = new Date(Date.UTC(year, 0, 4));
+  return weekRange(setISOWeek(anchor, week));
 }
 
 /** Stable sortable key, e.g. "2026-W03". */
