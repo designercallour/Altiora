@@ -11,6 +11,7 @@
  */
 
 import { createClient } from "@/supabase/server";
+import { createAdminClient } from "@/supabase/admin";
 import type {
   AssignMentorOptions,
   CohortInput,
@@ -22,6 +23,7 @@ import type {
   InternUpdate,
   MentorInput,
   MentorUpdate,
+  NotificationInput,
   ReportInput,
   ReportQuery,
   ReportUpdate,
@@ -35,6 +37,7 @@ import type {
   LearningSourceRow,
   MentorAssignmentRow,
   MentorFeedbackRow,
+  NotificationRow,
   ProjectRow,
   SkillCategoryRow,
   SkillRow,
@@ -61,6 +64,7 @@ import type {
   MentorAssignmentDetail,
   MentorFeedback,
   MentorSummary,
+  NotificationRecord,
   Project,
   Skill,
   SkillCategory,
@@ -208,6 +212,17 @@ const toInternship = (r: InternshipRow): Internship => ({
   deletedAt: r.deleted_at,
 });
 
+const toNotification = (r: NotificationRow): NotificationRecord => ({
+  id: r.id,
+  recipientId: r.recipient_id,
+  type: r.type,
+  title: r.title,
+  body: r.body,
+  payload: r.payload ?? {},
+  readAt: r.read_at,
+  createdAt: r.created_at,
+});
+
 const toMentorAssignment = (r: MentorAssignmentRow): MentorAssignment => ({
   id: r.id,
   internshipId: r.internship_id,
@@ -337,8 +352,15 @@ function reportScalars(v: ReportUpdate) {
 }
 
 export class SupabaseDataSource implements DataSource {
+  /**
+   * @param opts.admin — use the service-role client (bypasses RLS). Only for
+   * trusted server jobs like the weekly-reminder cron, which write for many
+   * users with no session. Defaults to the request-scoped user client.
+   */
+  constructor(private opts: { admin?: boolean } = {}) {}
+
   private async db() {
-    return createClient();
+    return this.opts.admin ? createAdminClient() : createClient();
   }
 
   // ── session ──────────────────────────────────────────────────────────────
@@ -996,6 +1018,64 @@ export class SupabaseDataSource implements DataSource {
           : null,
       } satisfies MentorAssignmentDetail;
     });
+  }
+
+  // ── notifications ────────────────────────────────────────────────────────
+  async createNotification(
+    input: NotificationInput,
+  ): Promise<NotificationRecord | null> {
+    const supabase = await this.db();
+    const row = {
+      recipient_id: input.recipientId,
+      type: input.type,
+      title: input.title,
+      body: input.body ?? null,
+      payload: input.payload ?? {},
+      dedupe_key: input.dedupeKey ?? null,
+    };
+    if (input.dedupeKey) {
+      // Idempotent: skip if this recipient already has this keyed notification.
+      const { data, error } = await supabase
+        .from("notifications")
+        .upsert(row, { onConflict: "recipient_id,dedupe_key", ignoreDuplicates: true })
+        .select("*");
+      if (error) throw new Error(error.message);
+      const created = (data ?? []) as NotificationRow[];
+      return created[0] ? toNotification(created[0]) : null;
+    }
+    const { data, error } = await supabase
+      .from("notifications")
+      .insert(row)
+      .select("*")
+      .single();
+    if (error || !data)
+      throw new Error(error?.message ?? "Failed to create notification");
+    return toNotification(data as NotificationRow);
+  }
+
+  async listNotifications(
+    userId: string,
+    opts: { unreadOnly?: boolean; limit?: number } = {},
+  ): Promise<NotificationRecord[]> {
+    const supabase = await this.db();
+    let q = supabase
+      .from("notifications")
+      .select("*")
+      .eq("recipient_id", userId)
+      .order("created_at", { ascending: false });
+    if (opts.unreadOnly) q = q.is("read_at", null);
+    if (opts.limit != null) q = q.limit(opts.limit);
+    const { data } = await q;
+    return ((data ?? []) as NotificationRow[]).map(toNotification);
+  }
+
+  async markNotificationRead(id: string): Promise<void> {
+    const supabase = await this.db();
+    await supabase
+      .from("notifications")
+      .update({ read_at: new Date().toISOString() })
+      .eq("id", id)
+      .is("read_at", null);
   }
 
   // ── reports ────────────────────────────────────────────────────────────────

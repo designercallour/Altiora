@@ -18,6 +18,7 @@ import type {
   MentorAssignmentDetail,
   MentorFeedback,
   MentorSummary,
+  NotificationRecord,
   UserRole,
   WeeklyReport,
   WeeklyReportDetail,
@@ -33,6 +34,7 @@ import type {
   InternUpdate,
   MentorInput,
   MentorUpdate,
+  NotificationInput,
   ReportInput,
   ReportQuery,
   ReportUpdate,
@@ -56,6 +58,7 @@ function byWeekDesc(a: WeeklyReport, b: WeeklyReport): number {
 
 export class MockDataSource implements DataSource {
   private db: MockDataset;
+  private notifDedupe = new Set<string>();
 
   constructor(dataset: MockDataset = generateDataset()) {
     this.db = dataset;
@@ -515,6 +518,45 @@ export class MockDataSource implements DataSource {
           };
         }),
     );
+  }
+
+  // ── notifications ────────────────────────────────────────────────────────
+  async createNotification(
+    input: NotificationInput,
+  ): Promise<NotificationRecord | null> {
+    if (input.dedupeKey) {
+      const key = `${input.recipientId}::${input.dedupeKey}`;
+      if (this.notifDedupe.has(key)) return null;
+      this.notifDedupe.add(key);
+    }
+    const rec: NotificationRecord = {
+      id: crypto.randomUUID(),
+      recipientId: input.recipientId,
+      type: input.type,
+      title: input.title,
+      body: input.body ?? null,
+      payload: input.payload ?? {},
+      readAt: null,
+      createdAt: nowIso(),
+    };
+    this.db.notifications.push(rec);
+    return clone(rec);
+  }
+
+  async listNotifications(
+    userId: string,
+    opts: { unreadOnly?: boolean; limit?: number } = {},
+  ): Promise<NotificationRecord[]> {
+    let items = this.db.notifications.filter((n) => n.recipientId === userId);
+    if (opts.unreadOnly) items = items.filter((n) => n.readAt == null);
+    items = [...items].sort((a, b) => b.createdAt.localeCompare(a.createdAt));
+    if (opts.limit != null) items = items.slice(0, opts.limit);
+    return clone(items);
+  }
+
+  async markNotificationRead(id: string): Promise<void> {
+    const n = this.db.notifications.find((x) => x.id === id);
+    if (n && n.readAt == null) n.readAt = nowIso();
   }
 
   // ── reports ────────────────────────────────────────────────────────────────

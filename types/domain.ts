@@ -145,6 +145,19 @@ export interface MentorAssignmentDetail extends MentorAssignment {
   mentor: Pick<AppUser, "id" | "fullName" | "avatarUrl"> | null;
 }
 
+// ── In-app notifications ──────────────────────────────────────────────────────
+/** A delivered in-app notification (the reminder inbox). */
+export interface NotificationRecord {
+  id: string;
+  recipientId: string;
+  type: string; // a NotificationType value, stored as text
+  title: string;
+  body: string | null;
+  payload: Record<string, unknown>;
+  readAt: string | null;
+  createdAt: string;
+}
+
 // ── Weekly report + children ──────────────────────────────────────────────────
 export interface WeeklyReport extends Timestamps, SoftDelete {
   id: string;

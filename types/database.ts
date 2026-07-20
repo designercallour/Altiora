@@ -140,6 +140,18 @@ export interface MentorAssignmentRow {
   updated_at: string;
 }
 
+export interface NotificationRow {
+  id: string;
+  recipient_id: string;
+  type: string;
+  title: string;
+  body: string | null;
+  payload: Record<string, unknown>;
+  dedupe_key: string | null;
+  read_at: string | null;
+  created_at: string;
+}
+
 export interface WeeklyReportRow {
   id: string;
   internship_id: string;

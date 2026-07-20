@@ -21,6 +21,7 @@ import type {
   MentorAssignmentDetail,
   MentorFeedback,
   MentorSummary,
+  NotificationRecord,
   ReportStatus,
   UserRole,
   WeeklyReport,
@@ -120,6 +121,16 @@ export interface AssignMentorOptions {
   note?: string | null;
 }
 
+export interface NotificationInput {
+  recipientId: string;
+  type: string;
+  title: string;
+  body?: string | null;
+  payload?: Record<string, unknown>;
+  /** Idempotency key — creating with an existing (recipient, key) is a no-op. */
+  dedupeKey?: string | null;
+}
+
 // ── The interface ──────────────────────────────────────────────────────────────
 export interface DataSource {
   // Session / identity ---------------------------------------------------------
@@ -172,6 +183,17 @@ export interface DataSource {
   listMentorAssignments(
     internshipId: string,
   ): Promise<MentorAssignmentDetail[]>;
+
+  // In-app notifications -------------------------------------------------------
+  /** Create a notification. Returns null when deduped by (recipient, dedupeKey). */
+  createNotification(
+    input: NotificationInput,
+  ): Promise<NotificationRecord | null>;
+  listNotifications(
+    userId: string,
+    opts?: { unreadOnly?: boolean; limit?: number },
+  ): Promise<NotificationRecord[]>;
+  markNotificationRead(id: string): Promise<void>;
 
   // Weekly reports -------------------------------------------------------------
   listReports(query?: ReportQuery): Promise<WeeklyReport[]>;
