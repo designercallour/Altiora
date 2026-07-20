@@ -13,7 +13,21 @@ import {
   reflectionCorpus,
 } from "@/services/ai/learning-intelligence";
 import { isInternshipActive } from "@/lib/internship";
+import { weekRange, isWeeklyReflectionOpen } from "@/lib/week";
 import { ROUTES } from "@/lib/constants";
+
+const REFLECTION_LOCKED_MSG =
+  "This week's reflection opens Friday at 09:00 WIB.";
+
+/**
+ * The current week's reflection is only writable inside its window
+ * (Fri 09:00 WIB → Sun). Past weeks are unaffected. Server-side source of truth.
+ */
+function reflectionLocked(year: number, week: number, now = new Date()): boolean {
+  const cw = weekRange(now);
+  const isCurrentWeek = year === cw.year && week === cw.week;
+  return isCurrentWeek && !isWeeklyReflectionOpen(now);
+}
 
 export interface SavePayload {
   reportId: string | null;
@@ -55,6 +69,10 @@ function toUpdate(v: ReportFormValues): ReportUpdate {
 export async function saveWeeklyDraft(
   payload: SavePayload,
 ): Promise<{ reportId: string }> {
+  if (reflectionLocked(payload.year, payload.weekNumber)) {
+    throw new Error(REFLECTION_LOCKED_MSG);
+  }
+
   const db = getDataSource();
 
   if (payload.reportId) {
@@ -98,6 +116,11 @@ export async function submitWeeklyReport(
       ok: false,
       error: parsed.error.issues[0]?.message ?? "Please complete the report.",
     };
+  }
+
+  // The current week's reflection is locked until its Friday 09:00 WIB window.
+  if (reflectionLocked(payload.year, payload.weekNumber)) {
+    return { ok: false, error: REFLECTION_LOCKED_MSG };
   }
 
   // Access control (server-side, defense in depth): reflections can only be

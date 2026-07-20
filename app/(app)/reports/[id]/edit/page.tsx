@@ -2,7 +2,7 @@ import type { Metadata } from "next";
 import { notFound, redirect } from "next/navigation";
 import { getCurrentUser } from "@/lib/session";
 import { getDataSource } from "@/services";
-import { formatWeekLabel } from "@/lib/week";
+import { formatWeekLabel, weekRange, isWeeklyReflectionOpen } from "@/lib/week";
 import { ReportWizard } from "@/features/weekly-report/components/report-wizard";
 import { formValuesFromReport } from "@/features/weekly-report/form-values";
 import { ROUTES } from "@/lib/constants";
@@ -27,6 +27,13 @@ export default async function EditReportPage({
 
   // Only drafts are editable; submitted reports are read-only.
   if (report.status === "submitted") redirect(ROUTES.report(id));
+
+  // A current-week draft can't be edited before its Friday 09:00 WIB window.
+  // Send them to the new-report screen, which shows the "opens Friday" lock.
+  const cw = weekRange();
+  const isCurrentWeek =
+    report.year === cw.year && report.weekNumber === cw.week;
+  if (isCurrentWeek && !isWeeklyReflectionOpen()) redirect(ROUTES.newReport);
 
   const lookups = await db.getLookups();
 
