@@ -7,7 +7,7 @@ import {
   weekRange,
   weekRangeOf,
   weekKey,
-  formatWeekLabel,
+  formatInternshipWeekLabel,
   isWeeklyReflectionOpen,
 } from "@/lib/week";
 import { PageContainer } from "@/components/shared/page-container";
@@ -118,7 +118,7 @@ export default async function NewReportPage({
         weekNumber: range.week,
         startDate: range.startDate,
         endDate: range.endDate,
-        label: formatWeekLabel(range),
+        label: formatInternshipWeekLabel(internship.startDate, range),
       }}
       initialValues={initialValues}
       categories={lookups.learningCategories.map((c) => ({

@@ -5,6 +5,7 @@ import { Badge } from "@/components/ui/badge";
 import { StatusChip } from "@/components/shared/status-chip";
 import { moodLevel } from "@/lib/domain";
 import { formatDate, getInitials } from "@/lib/format";
+import { internshipWeekNumber } from "@/lib/week";
 import type { InternSummary } from "@/types/domain";
 
 /**
@@ -54,7 +55,14 @@ export function InternRow({
         {summary.latestReport ? (
           <div className="shrink-0 text-right leading-tight">
             <p className="text-sm font-medium tabular-nums">
-              Week {summary.latestReport.weekNumber}
+              Week{" "}
+              {summary.internship
+                ? internshipWeekNumber(
+                    summary.internship.startDate,
+                    summary.latestReport.year,
+                    summary.latestReport.weekNumber,
+                  )
+                : summary.latestReport.weekNumber}
             </p>
             <p className="text-muted-foreground text-xs">
               {formatDate(summary.latestReport.startDate)}

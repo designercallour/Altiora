@@ -1,6 +1,7 @@
 import "server-only";
 import type { DataSource } from "@/services/data-source";
 import { internshipStatus } from "@/lib/internship";
+import { internshipWeekNumber } from "@/lib/week";
 
 export interface ReminderResult {
   /** Active interns considered for the given week. */
@@ -37,11 +38,12 @@ export async function remindInternsForWeek(
     );
     if (submitted) continue;
 
+    const relWeek = internshipWeekNumber(internship.startDate, year, week);
     const rec = await db.createNotification({
       recipientId: s.user.id,
       type: "reflection_overdue",
       title: "Weekly reflection reminder",
-      body: `Your Week ${week} reflection hasn't been submitted yet. Take a few quiet minutes to complete it.`,
+      body: `Your Week ${relWeek} reflection hasn't been submitted yet. Take a few quiet minutes to complete it.`,
       payload: { internshipId: internship.id, year, weekNumber: week },
       dedupeKey: `reflection_overdue:${year}:${week}`,
     });

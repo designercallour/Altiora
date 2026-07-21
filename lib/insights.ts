@@ -3,6 +3,7 @@
  * computed. Shared by the intern, mentor, and admin dashboards.
  */
 import type { WeeklyReportDetail } from "@/types/domain";
+import { internshipWeekNumber } from "@/lib/week";
 
 export interface SeriesPoint {
   label: string;
@@ -56,10 +57,16 @@ export function reportAverages(details: WeeklyReportDetail[]) {
 export function metricTrend(
   details: WeeklyReportDetail[],
   key: "mood" | "satisfaction" | "confidence",
+  startDateISO?: string,
 ): SeriesPoint[] {
   return submittedAsc(details)
     .filter((d) => d[key] != null)
-    .map((d) => ({ label: `W${d.weekNumber}`, value: d[key] as number }));
+    .map((d) => ({
+      label: startDateISO
+        ? `W${internshipWeekNumber(startDateISO, d.year, d.weekNumber)}`
+        : `W${d.weekNumber}`,
+      value: d[key] as number,
+    }));
 }
 
 /** Frequency of AI-extracted skills across submitted reports (most first). */

@@ -9,7 +9,11 @@ import {
   UserRound,
 } from "lucide-react";
 import { getDataSource } from "@/services";
-import { weekRange, isWeeklyReflectionOpen } from "@/lib/week";
+import {
+  weekRange,
+  isWeeklyReflectionOpen,
+  internshipWeekNumber,
+} from "@/lib/week";
 import { internshipLifecycle } from "@/lib/internship";
 import { ReminderBanner } from "@/features/notifications/components/reminder-banner";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
@@ -96,7 +100,7 @@ export async function InternDashboard({ user }: { user: AppUser }) {
   const averages = reportAverages(details);
   const learnings = totalLearnings(details);
 
-  const moodTrend = metricTrend(details, "mood");
+  const moodTrend = metricTrend(details, "mood", internship.startDate);
   const moodMeta = moodLevel(
     averages.mood != null ? Math.round(averages.mood) : null,
   );
@@ -129,7 +133,10 @@ export async function InternDashboard({ user }: { user: AppUser }) {
 
       {reminders.length > 0 ? (
         <div className="mt-6">
-          <ReminderBanner notifications={reminders} />
+          <ReminderBanner
+            notifications={reminders}
+            internshipStartDate={internship.startDate}
+          />
         </div>
       ) : null}
 
@@ -152,7 +159,7 @@ export async function InternDashboard({ user }: { user: AppUser }) {
                       : "Time for this week's reflection"}
                   </p>
                   <p className="text-muted-foreground text-sm">
-                    Week {cw.week} · a few quiet minutes is all it takes.
+                    Week {internshipWeekNumber(internship.startDate, cw.year, cw.week)} · a few quiet minutes is all it takes.
                   </p>
                 </div>
               </div>
@@ -340,7 +347,7 @@ export async function InternDashboard({ user }: { user: AppUser }) {
                     <span className="text-2xl">{mood?.emoji ?? "•"}</span>
                     <div className="min-w-0 flex-1">
                       <p className="text-sm font-medium">
-                        Week {r.weekNumber}
+                        Week {internshipWeekNumber(internship.startDate, r.year, r.weekNumber)}
                         <span className="text-muted-foreground font-normal">
                           {" "}
                           · {formatDate(r.startDate)}

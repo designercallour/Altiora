@@ -2,7 +2,11 @@ import type { Metadata } from "next";
 import { notFound, redirect } from "next/navigation";
 import { getCurrentUser } from "@/lib/session";
 import { getDataSource } from "@/services";
-import { formatWeekLabel, weekRange, isWeeklyReflectionOpen } from "@/lib/week";
+import {
+  formatInternshipWeekLabel,
+  weekRange,
+  isWeeklyReflectionOpen,
+} from "@/lib/week";
 import { ReportWizard } from "@/features/weekly-report/components/report-wizard";
 import { formValuesFromReport } from "@/features/weekly-report/form-values";
 import { ROUTES } from "@/lib/constants";
@@ -46,7 +50,7 @@ export default async function EditReportPage({
         weekNumber: report.weekNumber,
         startDate: report.startDate,
         endDate: report.endDate,
-        label: formatWeekLabel({
+        label: formatInternshipWeekLabel(internship.startDate, {
           year: report.year,
           week: report.weekNumber,
           startDate: report.startDate,

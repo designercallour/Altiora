@@ -80,3 +80,33 @@ export function formatWeekLabel(range: WeekRange): string {
   const end = new Date(`${range.endDate}T00:00:00Z`);
   return `Week ${range.week} · ${format(start, "MMM d")} – ${format(end, "MMM d")}`;
 }
+
+/**
+ * Internship-relative week number for display. Week 1 = the ISO week that
+ * contains the internship's start date; each later ISO week increments by one.
+ * (The stored report still uses the absolute ISO week — this is display only.)
+ * TZ-safe: both Mondays are parsed the same way, so the offset cancels.
+ */
+export function internshipWeekNumber(
+  startDateISO: string,
+  year: number,
+  week: number,
+): number {
+  const startMonday = new Date(`${weekRange(new Date(`${startDateISO}T00:00:00`)).startDate}T00:00:00`);
+  const targetMonday = new Date(`${weekRangeOf(year, week).startDate}T00:00:00`);
+  const weeks = Math.round(
+    (targetMonday.getTime() - startMonday.getTime()) / (7 * 86_400_000),
+  );
+  return weeks + 1;
+}
+
+/** e.g. "Week 2 · Jul 13 – Jul 19", numbered relative to the internship start. */
+export function formatInternshipWeekLabel(
+  startDateISO: string,
+  range: WeekRange,
+): string {
+  const n = internshipWeekNumber(startDateISO, range.year, range.week);
+  const start = new Date(`${range.startDate}T00:00:00Z`);
+  const end = new Date(`${range.endDate}T00:00:00Z`);
+  return `Week ${n} · ${format(start, "MMM d")} – ${format(end, "MMM d")}`;
+}

@@ -26,6 +26,7 @@ import { Reveal, Stagger, StaggerItem } from "@/components/shared/motion";
 import { InternAdminPanel } from "@/features/admin/components/intern-admin-panel";
 import { moodLevel } from "@/lib/domain";
 import { formatDate, round1 } from "@/lib/format";
+import { internshipWeekNumber } from "@/lib/week";
 import { ROUTES } from "@/lib/constants";
 import {
   metricTrend,
@@ -210,7 +211,7 @@ export default async function InternProfilePage({
                     >
                       <div className="w-16 shrink-0">
                         <p className="text-sm font-semibold tabular-nums">
-                          Week {r.weekNumber}
+                          Week {internshipWeekNumber(internship.startDate, r.year, r.weekNumber)}
                         </p>
                         <p className="text-muted-foreground text-xs">
                           {formatDate(r.startDate)}
