@@ -89,7 +89,9 @@ type ReportRowWithChildren = WeeklyReportRow & {
   learning_logs: LearningLogRow[] | null;
   weekly_skill_scores: WeeklySkillScoreRow[] | null;
   mentor_feedback: MentorFeedbackRow[] | null;
-  report_intelligence: ReportIntelligenceRow[] | null;
+  // report_id is report_intelligence's PK, so PostgREST embeds it as a single
+  // object (one-to-one), not an array. Accept both shapes defensively.
+  report_intelligence: ReportIntelligenceRow | ReportIntelligenceRow[] | null;
 };
 
 const REPORT_SELECT =
@@ -318,7 +320,11 @@ function hydrate(r: ReportRowWithChildren): WeeklyReportDetail {
       .sort((a, b) => a.createdAt.localeCompare(b.createdAt)),
     skillScores: (r.weekly_skill_scores ?? []).map(toSkillScore),
     feedback: feedback[0] ? toFeedback(feedback[0]) : null,
-    intelligence: toIntelligence(r.report_intelligence?.[0]),
+    intelligence: toIntelligence(
+      Array.isArray(r.report_intelligence)
+        ? r.report_intelligence[0]
+        : r.report_intelligence,
+    ),
   };
 }
 
