@@ -3,7 +3,7 @@ import Link from "next/link";
 import { ArrowRight, NotebookPen, PenLine } from "lucide-react";
 import { getCurrentUser } from "@/lib/session";
 import { getDataSource } from "@/services";
-import { weekRange } from "@/lib/week";
+import { weekRange, internshipWeekNumber } from "@/lib/week";
 import { PageContainer } from "@/components/shared/page-container";
 import { PageHeader } from "@/components/shared/page-header";
 import { SectionHeader } from "@/components/shared/section-header";
@@ -79,7 +79,8 @@ export default async function ReportsPage() {
               </span>
               <div>
                 <p className="text-muted-foreground text-xs font-medium tracking-widest uppercase">
-                  This week · Week {cw.week}
+                  This week · Week{" "}
+                  {internshipWeekNumber(internship.startDate, cw.year, cw.week)}
                 </p>
                 <p className="mt-0.5 text-sm font-medium">
                   {current?.status === "submitted"
@@ -126,7 +127,11 @@ export default async function ReportsPage() {
         ) : (
           <ul className="space-y-2">
             {history.map((r) => (
-              <ReportRow key={r.id} report={r} />
+              <ReportRow
+                key={r.id}
+                report={r}
+                startDate={internship.startDate}
+              />
             ))}
           </ul>
         )}
@@ -135,7 +140,13 @@ export default async function ReportsPage() {
   );
 }
 
-function ReportRow({ report }: { report: WeeklyReport }) {
+function ReportRow({
+  report,
+  startDate,
+}: {
+  report: WeeklyReport;
+  startDate: string;
+}) {
   const mood = moodLevel(report.mood);
   return (
     <li>
@@ -148,7 +159,8 @@ function ReportRow({ report }: { report: WeeklyReport }) {
         </span>
         <div className="min-w-0 flex-1">
           <p className="text-sm font-medium">
-            Week {report.weekNumber}
+            Week{" "}
+            {internshipWeekNumber(startDate, report.year, report.weekNumber)}
             <span className="text-muted-foreground font-normal">
               {" "}
               · {formatDate(report.startDate)}

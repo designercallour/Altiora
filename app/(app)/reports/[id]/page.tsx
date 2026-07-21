@@ -13,7 +13,7 @@ import { MentorReviewPanel } from "@/features/reports/components/mentor-review-p
 import { ReportSuccess } from "@/features/weekly-report/components/report-success";
 import { REPORT_STATUS_LABELS } from "@/lib/domain";
 import { formatDate } from "@/lib/format";
-import { formatWeekLabel } from "@/lib/week";
+import { formatInternshipWeekLabel, internshipWeekNumber } from "@/lib/week";
 import { ROUTES } from "@/lib/constants";
 
 export const metadata: Metadata = { title: "Weekly Report" };
@@ -52,7 +52,7 @@ export default async function ReportDetailPage({
     return (
       <ReportSuccess
         reportId={report.id}
-        weekLabel={formatWeekLabel({
+        weekLabel={formatInternshipWeekLabel(internship.startDate, {
           year: report.year,
           week: report.weekNumber,
           startDate: report.startDate,
@@ -76,7 +76,7 @@ export default async function ReportDetailPage({
           eyebrow={
             isOwner ? "Your reflection" : `${intern?.fullName}'s reflection`
           }
-          title={`Week ${report.weekNumber} · ${report.year}`}
+          title={`Week ${internshipWeekNumber(internship.startDate, report.year, report.weekNumber)} · ${report.year}`}
           description={`${formatDate(report.startDate)} – ${formatDate(report.endDate)}`}
           actions={
             <div className="flex items-center gap-2">
