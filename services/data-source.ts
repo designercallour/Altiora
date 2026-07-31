@@ -21,7 +21,11 @@ import type {
   MentorAssignmentDetail,
   MentorFeedback,
   MentorSummary,
+  MonthlyOneOnOne,
   NotificationRecord,
+  OneOnOneContext,
+  OneOnOneListItem,
+  OneOnOneStatus,
   ReportStatus,
   UserRole,
   WeeklyReport,
@@ -78,6 +82,9 @@ export interface ReportInput {
   mentorHelp: string | null;
   confidence: number | null;
   workingHours: number | null;
+  playbackCompleted: boolean;
+  instagramStoryCompleted: boolean;
+  instagramStoryUrl: string | null;
   learningLogs: LearningLogInput[];
   skillScores: SkillScoreInput[];
 }
@@ -119,6 +126,23 @@ export type CohortUpdate = Partial<CohortInput>;
 export interface AssignMentorOptions {
   assignedById?: string | null;
   note?: string | null;
+}
+
+export interface OneOnOneQuery {
+  /** Existing records where this user is the assigned mentor of the internship. */
+  mentorId?: string;
+  internshipId?: string;
+  /** Existing records for the internship(s) belonging to this intern user. */
+  internUserId?: string;
+  year?: number;
+  month?: number;
+  status?: OneOnOneStatus;
+}
+
+export interface OneOnOneNotesInput {
+  strengths: string | null;
+  concerns: string | null;
+  goalsNextMonth: string | null;
 }
 
 export interface NotificationInput {
@@ -227,4 +251,33 @@ export interface DataSource {
     input: FeedbackInput,
     mentorId: string | null,
   ): Promise<MentorFeedback>;
+
+  // Monthly 1-on-1 -------------------------------------------------------------
+  /** Existing 1-on-1 records matching the query, most-recent month first. */
+  listOneOnOnes(query?: OneOnOneQuery): Promise<OneOnOneListItem[]>;
+  /** A saved record hydrated with intern info + reflection rollup, or null. */
+  getOneOnOneById(id: string): Promise<OneOnOneContext | null>;
+  /**
+   * Editor context for a given internship + month: the intern's info, the
+   * month's Weekly Reflection rollup, and the record (null if not started).
+   * Returns null only when the internship doesn't exist.
+   */
+  getOneOnOneContext(
+    internshipId: string,
+    year: number,
+    month: number,
+  ): Promise<OneOnOneContext | null>;
+  /** Create or update (by internship+year+month) the mentor notes. */
+  upsertOneOnOne(
+    internshipId: string,
+    year: number,
+    month: number,
+    notes: OneOnOneNotesInput,
+    mentorId: string | null,
+  ): Promise<MonthlyOneOnOne>;
+  /** Flip a record's status (sets/clears completed_at accordingly). */
+  setOneOnOneStatus(
+    id: string,
+    status: OneOnOneStatus,
+  ): Promise<MonthlyOneOnOne>;
 }

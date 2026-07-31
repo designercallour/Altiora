@@ -15,6 +15,8 @@ export type InternshipStatus =
 
 export type ReportStatus = "draft" | "submitted";
 
+export type OneOnOneStatus = "not_started" | "completed";
+
 export const USER_ROLES: readonly UserRole[] = ["admin", "mentor", "intern"];
 export const INTERNSHIP_STATUSES: readonly InternshipStatus[] = [
   "upcoming",
@@ -24,6 +26,10 @@ export const INTERNSHIP_STATUSES: readonly InternshipStatus[] = [
   "terminated",
 ];
 export const REPORT_STATUSES: readonly ReportStatus[] = ["draft", "submitted"];
+export const ONE_ON_ONE_STATUSES: readonly OneOnOneStatus[] = [
+  "not_started",
+  "completed",
+];
 
 // ── Shared field mixins ──────────────────────────────────────────────────────
 export interface Timestamps {
@@ -174,6 +180,12 @@ export interface WeeklyReport extends Timestamps, SoftDelete {
   mentorHelp: string | null;
   confidence: number | null; // 1..10
   workingHours: number | null;
+  /** Intern confirmed they completed at least one playback session this week. */
+  playbackCompleted: boolean;
+  /** Intern confirmed they posted an Instagram Story about their internship. */
+  instagramStoryCompleted: boolean;
+  /** Storage path/URL of the uploaded Instagram Story proof, or null. */
+  instagramStoryUrl: string | null;
   status: ReportStatus;
   submittedAt: string | null;
   reviewedAt: string | null; // set when a mentor marks the report reviewed
@@ -273,6 +285,66 @@ export interface InternDetail {
   assignments: MentorAssignmentDetail[];
   submittedCount: number;
   latestReport: WeeklyReport | null;
+}
+
+// ── Monthly 1-on-1 (mentor ↔ intern monthly meeting notes) ────────────────────
+
+/**
+ * One month's documented mentor-intern check-in. Keyed to an internship (which
+ * identifies the intern) plus a month/year. The meeting itself happens outside
+ * the platform; this record captures its outcome. There is at most one row per
+ * internship per month (enforced by a unique index).
+ */
+export interface MonthlyOneOnOne extends Timestamps {
+  id: string;
+  internshipId: string;
+  /** The mentor who authored the notes (snapshot; may differ after reassignment). */
+  mentorId: string | null;
+  month: number; // 1..12
+  year: number;
+  strengths: string | null;
+  concerns: string | null;
+  goalsNextMonth: string | null;
+  status: OneOnOneStatus;
+  completedAt: string | null;
+}
+
+/** A row in the Monthly 1-on-1 management table. */
+export interface OneOnOneListItem {
+  /** The saved record id, or null when this month has no record yet. */
+  id: string | null;
+  internshipId: string;
+  intern: Pick<AppUser, "id" | "fullName" | "avatarUrl">;
+  mentor: Pick<AppUser, "id" | "fullName" | "avatarUrl"> | null;
+  month: number;
+  year: number;
+  status: OneOnOneStatus;
+  completedAt: string | null;
+  /** Last time the record changed, or null for a not-yet-created month. */
+  updatedAt: string | null;
+}
+
+/** Rollup of an intern's Weekly Reflections within a given month. */
+export interface OneOnOneReflectionSummary {
+  totalSubmitted: number;
+  playbackCount: number;
+  instagramCount: number;
+  /** The submitted reflections that fall within the month, most recent first. */
+  reports: WeeklyReport[];
+}
+
+/** Everything the Monthly 1-on-1 editor/detail screen needs. */
+export interface OneOnOneContext {
+  internshipId: string;
+  intern: Pick<AppUser, "id" | "fullName" | "avatarUrl">;
+  position: string | null; // the intern's role
+  cohort: Cohort | null;
+  mentor: Pick<AppUser, "id" | "fullName" | "avatarUrl"> | null;
+  month: number;
+  year: number;
+  /** The saved record, or null if this month hasn't been started. */
+  record: MonthlyOneOnOne | null;
+  reflectionSummary: OneOnOneReflectionSummary;
 }
 
 /** All lookup data, loaded once and passed to forms/filters. */

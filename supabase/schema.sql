@@ -242,6 +242,9 @@ create table if not exists public.weekly_reports (
   mentor_help   text,
   confidence    smallint check (confidence between 1 and 10),
   working_hours numeric(5, 1) check (working_hours >= 0),
+  playback_completed        boolean not null default false,                     -- intern confirmed a playback session
+  instagram_story_completed boolean not null default false,                     -- intern confirmed an IG story
+  instagram_story_url       text,                                               -- storage path/URL of the IG story proof, or null
   status        report_status not null default 'draft',
   submitted_at  timestamptz,
   reviewed_at   timestamptz,                                                     -- set when the mentor marks it reviewed
@@ -355,6 +358,29 @@ create index if not exists notifications_recipient_unread_idx
 create unique index if not exists notifications_dedupe_key
   on public.notifications (recipient_id, dedupe_key) where dedupe_key is not null;
 
+-- Monthly 1-on-1: one documented mentor↔intern check-in per internship per month.
+create table if not exists public.monthly_one_on_ones (
+  id               uuid primary key default gen_random_uuid(),
+  internship_id    uuid not null references public.internships (id) on delete cascade,
+  mentor_id        uuid references public.users (id) on delete set null,
+  month            smallint not null check (month between 1 and 12),
+  year             int not null,
+  strengths        text,
+  concerns         text,
+  goals_next_month text,
+  status           text not null default 'not_started'
+                     check (status in ('not_started', 'completed')),
+  completed_at     timestamptz,
+  created_at       timestamptz not null default now(),
+  updated_at       timestamptz not null default now()
+);
+create unique index if not exists monthly_one_on_ones_period_key
+  on public.monthly_one_on_ones (internship_id, year, month);
+create index if not exists monthly_one_on_ones_internship_idx
+  on public.monthly_one_on_ones (internship_id);
+create index if not exists monthly_one_on_ones_mentor_idx
+  on public.monthly_one_on_ones (mentor_id);
+
 -- ----------------------------------------------------------------------------
 -- updated_at triggers
 -- ----------------------------------------------------------------------------
@@ -365,7 +391,7 @@ declare
     'departments','teams','cohorts','projects','skill_categories','skills',
     'learning_categories','learning_sources','users','internships',
     'weekly_reports','weekly_skill_scores','learning_logs','mentor_feedback',
-    'report_intelligence','mentor_assignments'
+    'report_intelligence','mentor_assignments','monthly_one_on_ones'
   ];
 begin
   foreach t in array tables loop
@@ -403,7 +429,8 @@ declare t text;
     'departments','teams','cohorts','projects','skill_categories','skills',
     'learning_categories','learning_sources','users','internships',
     'weekly_reports','weekly_skill_scores','learning_logs','mentor_feedback',
-    'report_intelligence','mentor_assignments','notifications'
+    'report_intelligence','mentor_assignments','notifications',
+    'monthly_one_on_ones'
   ];
 begin
   foreach t in array tables loop
@@ -635,6 +662,39 @@ create policy "notifications_own_select" on public.notifications for select
 create policy "notifications_own_update" on public.notifications for update
   using (recipient_id = public.current_app_user_id())
   with check (recipient_id = public.current_app_user_id());
+
+-- monthly_one_on_ones ---------------------------------------------------------
+drop policy if exists "ooo_admin_all"     on public.monthly_one_on_ones;
+drop policy if exists "ooo_mentor_all"    on public.monthly_one_on_ones;
+drop policy if exists "ooo_intern_select" on public.monthly_one_on_ones;
+
+-- Admins manage everything.
+create policy "ooo_admin_all" on public.monthly_one_on_ones for all
+  using (public.is_admin()) with check (public.is_admin());
+
+-- The internship's assigned mentor can read + create + edit its 1-on-1s.
+create policy "ooo_mentor_all" on public.monthly_one_on_ones for all
+  using (exists (
+    select 1 from public.internships i
+    where i.id = monthly_one_on_ones.internship_id
+      and i.mentor_id = public.current_app_user_id()
+  ))
+  with check (exists (
+    select 1 from public.internships i
+    where i.id = monthly_one_on_ones.internship_id
+      and i.mentor_id = public.current_app_user_id()
+  ));
+
+-- Interns may read ONLY their own completed records.
+create policy "ooo_intern_select" on public.monthly_one_on_ones for select
+  using (
+    status = 'completed'
+    and exists (
+      select 1 from public.internships i
+      where i.id = monthly_one_on_ones.internship_id
+        and i.user_id = public.current_app_user_id()
+    )
+  );
 
 -- ============================================================================
 -- AUTH INTEGRATION

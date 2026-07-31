@@ -8,6 +8,7 @@ import { ArrowLeft, ArrowRight, Send, X } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Textarea } from "@/components/ui/textarea";
 import { Label } from "@/components/ui/label";
+import { Checkbox } from "@/components/ui/checkbox";
 import { LinkButton } from "@/components/shared/link-button";
 import { useAutosave } from "@/hooks/use-autosave";
 import { moodLevel } from "@/lib/domain";
@@ -21,6 +22,7 @@ import {
 import { saveWeeklyDraft, submitWeeklyReport } from "../actions";
 import { MoodPicker } from "./mood-picker";
 import { LearningLogEditor } from "./learning-log-editor";
+import { InstagramStoryField } from "./instagram-story-field";
 import { AutosaveIndicator } from "./autosave-indicator";
 
 interface Option {
@@ -64,6 +66,11 @@ const STEPS = [
       "Capture each learning as its own entry — this is the heart of Altiora.",
   },
   {
+    key: "playback",
+    title: "Playback & Story",
+    subtitle: "Two quick confirmations to wrap up your week — both optional.",
+  },
+  {
     key: "review",
     title: "Review",
     subtitle: "One last look before you submit.",
@@ -74,6 +81,12 @@ type StepKey = (typeof STEPS)[number]["key"];
 
 export function ReportWizard(props: WizardProps) {
   const { internshipId, week, initialValues } = props;
+  // Instagram Story is a bi-weekly ritual on a program-wide calendar cadence:
+  // it's prompted on "story weeks" (odd ISO calendar weeks), i.e. once every
+  // two weeks, and everyone is on the same schedule. The current week is a
+  // story week; the next week is not. Weekly Playback is still asked weekly.
+  // (To flip the phase, change `=== 1` to `=== 0`.)
+  const isStoryWeek = week.weekNumber % 2 === 1;
   const reduce = useReducedMotion();
   const form = useForm<ReportFormValues>({ defaultValues: initialValues });
   const values = form.watch();
@@ -129,10 +142,12 @@ export function ReportWizard(props: WizardProps) {
   const canContinue = stepComplete(currentKey);
 
   function goNext() {
-    if (step < STEPS.length - 1) setStep((s) => s + 1);
+    // Clamp in the updater so rapid double-clicks (batched before a re-render)
+    // can't overshoot the last step and index past STEPS.
+    setStep((s) => Math.min(s + 1, STEPS.length - 1));
   }
   function goBack() {
-    if (step > 0) setStep((s) => s - 1);
+    setStep((s) => Math.max(s - 1, 0));
   }
   function goTo(key: StepKey) {
     const idx = STEPS.findIndex((s) => s.key === key);
@@ -204,7 +219,9 @@ export function ReportWizard(props: WizardProps) {
         >
           <div className="mb-6">
             <h1 className="text-2xl font-semibold tracking-tight">
-              {STEPS[step]!.title}
+              {currentKey === "playback" && !isStoryWeek
+                ? "Weekly Playback"
+                : STEPS[step]!.title}
             </h1>
           </div>
           {renderStep(currentKey)}
@@ -293,6 +310,55 @@ export function ReportWizard(props: WizardProps) {
           </div>
         );
       }
+      case "playback":
+        return (
+          <div className="space-y-5">
+            {/* Weekly Playback */}
+            <section className="border-border bg-card space-y-3 rounded-xl border p-4">
+              <div>
+                <h2 className="text-base font-semibold">Weekly Playback</h2>
+                <p className="text-muted-foreground mt-1 text-sm">
+                  Please confirm whether you completed at least one playback
+                  session this week.
+                </p>
+              </div>
+              <CheckboxRow
+                checked={values.playbackCompleted}
+                onCheckedChange={(v) => setValue("playbackCompleted", v)}
+                label="I completed at least one playback session this week."
+              />
+            </section>
+
+            {/* Instagram Story Documentation — bi-weekly, only on story weeks. */}
+            {isStoryWeek && (
+              <section className="border-border bg-card space-y-4 rounded-xl border p-4">
+                <div>
+                  <h2 className="text-base font-semibold">
+                    Instagram Story Documentation
+                  </h2>
+                  <p className="text-muted-foreground mt-1 text-sm">
+                    Create and upload at least one Instagram Story about your
+                    internship activities this week.
+                  </p>
+                </div>
+                <CheckboxRow
+                  checked={values.instagramStoryCompleted}
+                  onCheckedChange={(v) =>
+                    setValue("instagramStoryCompleted", v)
+                  }
+                  label="I created and uploaded at least one Instagram Story about my internship activities this week."
+                />
+                <InstagramStoryField
+                  internshipId={internshipId}
+                  year={week.year}
+                  weekNumber={week.weekNumber}
+                  value={values.instagramStoryUrl}
+                  onChange={(url) => setValue("instagramStoryUrl", url)}
+                />
+              </section>
+            )}
+          </div>
+        );
       case "review":
         return <ReviewStep />;
       default:
@@ -323,6 +389,27 @@ export function ReportWizard(props: WizardProps) {
         step: "learning",
         value: `${values.learningLogs.length} captured`,
       },
+      {
+        label: "Weekly Playback",
+        step: "playback",
+        value: values.playbackCompleted ? "Completed" : "Not confirmed",
+      },
+      // Instagram Story only appears on story weeks (bi-weekly).
+      ...(isStoryWeek
+        ? [
+            {
+              label: "Instagram Story",
+              step: "playback" as StepKey,
+              value: values.instagramStoryCompleted
+                ? values.instagramStoryUrl
+                  ? "Completed · proof attached"
+                  : "Completed"
+                : values.instagramStoryUrl
+                  ? "Proof attached"
+                  : "Not confirmed",
+            },
+          ]
+        : []),
     ];
     return (
       <div className="divide-border border-border divide-y rounded-xl border">
@@ -349,6 +436,32 @@ export function ReportWizard(props: WizardProps) {
       </div>
     );
   }
+}
+
+function CheckboxRow({
+  checked,
+  onCheckedChange,
+  label,
+}: {
+  checked: boolean;
+  onCheckedChange: (checked: boolean) => void;
+  label: string;
+}) {
+  const id = React.useId();
+  return (
+    <label
+      htmlFor={id}
+      className="border-border hover:bg-accent/40 flex cursor-pointer items-start gap-3 rounded-lg border p-3 transition-colors"
+    >
+      <Checkbox
+        id={id}
+        checked={checked}
+        onCheckedChange={onCheckedChange}
+        className="mt-0.5"
+      />
+      <span className="text-sm leading-snug">{label}</span>
+    </label>
+  );
 }
 
 function ReflectionField({

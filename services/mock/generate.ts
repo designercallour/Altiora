@@ -22,6 +22,7 @@ import type {
   LearningLog,
   LearningSource,
   MentorAssignment,
+  MonthlyOneOnOne,
   NotificationRecord,
   MentorFeedback,
   Project,
@@ -76,6 +77,7 @@ export interface MockDataset {
   feedback: MentorFeedback[];
   intelligence: ReportIntelligence[];
   mentorAssignments: MentorAssignment[];
+  oneOnOnes: MonthlyOneOnOne[];
   notifications: NotificationRecord[];
   currentUserId: string;
 }
@@ -311,6 +313,9 @@ export function generateDataset(): MockDataset {
         mentorHelp: rng.pick(MENTOR_HELP) || null,
         confidence,
         workingHours: rng.bool(0.85) ? rng.float(34, 46, 1) : null,
+        playbackCompleted: rng.bool(0.7),
+        instagramStoryCompleted: rng.bool(0.5),
+        instagramStoryUrl: null,
         status: "submitted",
         submittedAt: endTs,
         reviewedAt: null,
@@ -396,6 +401,39 @@ export function generateDataset(): MockDataset {
     });
   }
 
+  // ── Monthly 1-on-1s ─────────────────────────────────────────────────────────
+  // Seed completed check-ins for the two most-recent whole months so mentors
+  // and interns both have history to browse. The current month is intentionally
+  // left blank (the list synthesizes a "Not started" row for it).
+  const oneOnOnes: MonthlyOneOnOne[] = [];
+  {
+    const now = new Date();
+    const periods = [1, 2].map((back) => {
+      const d = new Date(Date.UTC(now.getUTCFullYear(), now.getUTCMonth() - back, 1));
+      return { year: d.getUTCFullYear(), month: d.getUTCMonth() + 1 };
+    });
+    for (const internship of internships) {
+      if (!internship.mentorId) continue;
+      for (const p of periods) {
+        const at = `${p.year}-${String(p.month).padStart(2, "0")}-28T10:00:00.000Z`;
+        oneOnOnes.push({
+          id: rng.uuid(),
+          internshipId: internship.id,
+          mentorId: internship.mentorId,
+          month: p.month,
+          year: p.year,
+          strengths: rng.pick(ONE_ON_ONE_STRENGTHS),
+          concerns: rng.pick(ONE_ON_ONE_CONCERNS),
+          goalsNextMonth: rng.pick(ONE_ON_ONE_GOALS),
+          status: "completed",
+          completedAt: at,
+          createdAt: at,
+          updatedAt: at,
+        });
+      }
+    }
+  }
+
   return {
     users,
     departments,
@@ -413,7 +451,26 @@ export function generateDataset(): MockDataset {
     feedback,
     intelligence,
     mentorAssignments,
+    oneOnOnes,
     notifications: [],
     currentUserId: interns[0]!.id,
   };
 }
+
+const ONE_ON_ONE_STRENGTHS = [
+  "Consistently shipped polished work and raised the bar on craft. Communication in standups was clear and proactive.",
+  "Strong ownership this month — took feedback well and turned it around quickly. Great collaboration with the design team.",
+  "Excellent problem-solving on the onboarding flow. Documented decisions thoroughly and mentored a newer intern.",
+];
+
+const ONE_ON_ONE_CONCERNS = [
+  "Occasionally over-scoped tasks and needed a nudge to break work down. Estimation is improving but still a growth area.",
+  "Tends to go quiet when blocked — would like to see earlier escalation next month.",
+  "A couple of handoffs slipped because specs weren't tight. Nothing major, but worth tightening.",
+];
+
+const ONE_ON_ONE_GOALS = [
+  "Lead one design review end-to-end and present findings to the wider team.",
+  "Ship an improvement without a checkpoint, and practice breaking large tasks into smaller PRs.",
+  "Run a short usability test, synthesize the results, and propose two changes.",
+];

@@ -24,6 +24,8 @@ import type {
   MentorInput,
   MentorUpdate,
   NotificationInput,
+  OneOnOneNotesInput,
+  OneOnOneQuery,
   ReportInput,
   ReportQuery,
   ReportUpdate,
@@ -37,6 +39,7 @@ import type {
   LearningSourceRow,
   MentorAssignmentRow,
   MentorFeedbackRow,
+  MonthlyOneOnOneRow,
   NotificationRow,
   ProjectRow,
   SkillCategoryRow,
@@ -64,7 +67,11 @@ import type {
   MentorAssignmentDetail,
   MentorFeedback,
   MentorSummary,
+  MonthlyOneOnOne,
   NotificationRecord,
+  OneOnOneContext,
+  OneOnOneListItem,
+  OneOnOneStatus,
   Project,
   Skill,
   SkillCategory,
@@ -75,6 +82,10 @@ import type {
   WeeklySkillScore,
 } from "@/types/domain";
 import { internshipStatus } from "@/lib/internship";
+import {
+  reflectionsInMonth,
+  summarizeReflections,
+} from "@/lib/one-on-one";
 
 interface ReportIntelligenceRow {
   report_id: string;
@@ -252,6 +263,9 @@ const toReport = (r: WeeklyReportRow): WeeklyReport => ({
   mentorHelp: r.mentor_help,
   confidence: r.confidence,
   workingHours: r.working_hours,
+  playbackCompleted: r.playback_completed ?? false,
+  instagramStoryCompleted: r.instagram_story_completed ?? false,
+  instagramStoryUrl: r.instagram_story_url ?? null,
   status: r.status,
   submittedAt: r.submitted_at,
   reviewedAt: r.reviewed_at,
@@ -293,6 +307,21 @@ const toFeedback = (r: MentorFeedbackRow): MentorFeedback => ({
   createdAt: r.created_at,
   updatedAt: r.updated_at,
   deletedAt: r.deleted_at,
+});
+
+const toOneOnOne = (r: MonthlyOneOnOneRow): MonthlyOneOnOne => ({
+  id: r.id,
+  internshipId: r.internship_id,
+  mentorId: r.mentor_id,
+  month: r.month,
+  year: r.year,
+  strengths: r.strengths,
+  concerns: r.concerns,
+  goalsNextMonth: r.goals_next_month,
+  status: r.status,
+  completedAt: r.completed_at,
+  createdAt: r.created_at,
+  updatedAt: r.updated_at,
 });
 
 function toIntelligence(
@@ -354,6 +383,12 @@ function reportScalars(v: ReportUpdate) {
   if (v.mentorHelp !== undefined) out.mentor_help = v.mentorHelp;
   if (v.confidence !== undefined) out.confidence = v.confidence;
   if (v.workingHours !== undefined) out.working_hours = v.workingHours;
+  if (v.playbackCompleted !== undefined)
+    out.playback_completed = v.playbackCompleted;
+  if (v.instagramStoryCompleted !== undefined)
+    out.instagram_story_completed = v.instagramStoryCompleted;
+  if (v.instagramStoryUrl !== undefined)
+    out.instagram_story_url = v.instagramStoryUrl;
   return out;
 }
 
@@ -1182,6 +1217,9 @@ export class SupabaseDataSource implements DataSource {
         mentor_help: input.mentorHelp,
         confidence: input.confidence,
         working_hours: input.workingHours,
+        playback_completed: input.playbackCompleted,
+        instagram_story_completed: input.instagramStoryCompleted,
+        instagram_story_url: input.instagramStoryUrl,
         status: "draft",
       })
       .select("id")
@@ -1345,5 +1383,234 @@ export class SupabaseDataSource implements DataSource {
     if (error || !data)
       throw new Error(error?.message ?? "Failed to save feedback");
     return toFeedback(data as MentorFeedbackRow);
+  }
+
+  // ── monthly 1-on-1 ────────────────────────────────────────────────────────
+  private async buildOneOnOneContext(
+    internship: Internship,
+    year: number,
+    month: number,
+    record: MonthlyOneOnOne | null,
+  ): Promise<OneOnOneContext> {
+    const [internUser, mentorUser, cohort, reports] = await Promise.all([
+      this.getUserById(internship.userId),
+      internship.mentorId
+        ? this.getUserById(internship.mentorId)
+        : Promise.resolve(null),
+      internship.cohortId
+        ? this.getCohortById(internship.cohortId)
+        : Promise.resolve(null),
+      this.listReports({ internshipId: internship.id }),
+    ]);
+    const lite = (u: AppUser | null) =>
+      u ? { id: u.id, fullName: u.fullName, avatarUrl: u.avatarUrl } : null;
+    return {
+      internshipId: internship.id,
+      intern: lite(internUser) ?? {
+        id: internship.userId,
+        fullName: "Unknown intern",
+        avatarUrl: null,
+      },
+      position: internship.position,
+      cohort,
+      mentor: lite(mentorUser),
+      month,
+      year,
+      record,
+      reflectionSummary: summarizeReflections(
+        reflectionsInMonth(reports, year, month),
+      ),
+    };
+  }
+
+  async listOneOnOnes(query: OneOnOneQuery = {}): Promise<OneOnOneListItem[]> {
+    const supabase = await this.db();
+    let q = supabase.from("monthly_one_on_ones").select("*");
+    if (query.internshipId) q = q.eq("internship_id", query.internshipId);
+    if (query.year != null) q = q.eq("year", query.year);
+    if (query.month != null) q = q.eq("month", query.month);
+    if (query.status) q = q.eq("status", query.status);
+    const { data, error } = await q
+      .order("year", { ascending: false })
+      .order("month", { ascending: false });
+    if (error) throw new Error(error.message);
+
+    let records = (data ?? []) as MonthlyOneOnOneRow[];
+    if (!records.length) return [];
+
+    const internshipIds = [...new Set(records.map((r) => r.internship_id))];
+    const { data: iRows } = await supabase
+      .from("internships")
+      .select("id, user_id, mentor_id")
+      .in("id", internshipIds);
+    type ILite = { id: string; user_id: string; mentor_id: string | null };
+    const internships = new Map(
+      ((iRows ?? []) as ILite[]).map((i) => [i.id, i]),
+    );
+
+    if (query.mentorId)
+      records = records.filter(
+        (r) => internships.get(r.internship_id)?.mentor_id === query.mentorId,
+      );
+    if (query.internUserId)
+      records = records.filter(
+        (r) => internships.get(r.internship_id)?.user_id === query.internUserId,
+      );
+
+    const userIds = new Set<string>();
+    for (const r of records) {
+      const i = internships.get(r.internship_id);
+      if (i?.user_id) userIds.add(i.user_id);
+      if (i?.mentor_id) userIds.add(i.mentor_id);
+    }
+    const { data: uRows } = await supabase
+      .from("users")
+      .select("id, full_name, avatar_url")
+      .in("id", [...userIds]);
+    type ULite = { id: string; full_name: string; avatar_url: string | null };
+    const users = new Map(((uRows ?? []) as ULite[]).map((u) => [u.id, u]));
+    const lite = (id: string | null | undefined) => {
+      const u = id ? users.get(id) : null;
+      return u
+        ? { id: u.id, fullName: u.full_name, avatarUrl: u.avatar_url }
+        : null;
+    };
+
+    return records.map((r) => {
+      const i = internships.get(r.internship_id);
+      return {
+        id: r.id,
+        internshipId: r.internship_id,
+        intern: lite(i?.user_id) ?? {
+          id: i?.user_id ?? "",
+          fullName: "Unknown intern",
+          avatarUrl: null,
+        },
+        mentor: lite(i?.mentor_id),
+        month: r.month,
+        year: r.year,
+        status: r.status,
+        completedAt: r.completed_at,
+        updatedAt: r.updated_at,
+      };
+    });
+  }
+
+  async getOneOnOneById(id: string): Promise<OneOnOneContext | null> {
+    const supabase = await this.db();
+    const { data } = await supabase
+      .from("monthly_one_on_ones")
+      .select("*")
+      .eq("id", id)
+      .maybeSingle();
+    if (!data) return null;
+    const record = toOneOnOne(data as MonthlyOneOnOneRow);
+    const internship = await this.getInternshipById(record.internshipId);
+    if (!internship) return null;
+    return this.buildOneOnOneContext(
+      internship,
+      record.year,
+      record.month,
+      record,
+    );
+  }
+
+  async getOneOnOneContext(
+    internshipId: string,
+    year: number,
+    month: number,
+  ): Promise<OneOnOneContext | null> {
+    const internship = await this.getInternshipById(internshipId);
+    if (!internship) return null;
+    const supabase = await this.db();
+    const { data } = await supabase
+      .from("monthly_one_on_ones")
+      .select("*")
+      .eq("internship_id", internshipId)
+      .eq("year", year)
+      .eq("month", month)
+      .maybeSingle();
+    const record = data ? toOneOnOne(data as MonthlyOneOnOneRow) : null;
+    return this.buildOneOnOneContext(internship, year, month, record);
+  }
+
+  async upsertOneOnOne(
+    internshipId: string,
+    year: number,
+    month: number,
+    notes: OneOnOneNotesInput,
+    mentorId: string | null,
+  ): Promise<MonthlyOneOnOne> {
+    const supabase = await this.db();
+    const notesPayload = {
+      strengths: notes.strengths,
+      concerns: notes.concerns,
+      goals_next_month: notes.goalsNextMonth,
+    };
+    const { data: existing } = await supabase
+      .from("monthly_one_on_ones")
+      .select("id")
+      .eq("internship_id", internshipId)
+      .eq("year", year)
+      .eq("month", month)
+      .maybeSingle();
+
+    if (existing) {
+      const patch = mentorId
+        ? { ...notesPayload, mentor_id: mentorId }
+        : notesPayload;
+      const { data, error } = await supabase
+        .from("monthly_one_on_ones")
+        .update(patch)
+        .eq("id", (existing as { id: string }).id)
+        .select("*")
+        .single();
+      if (error || !data)
+        throw new Error(error?.message ?? "Failed to save 1-on-1");
+      return toOneOnOne(data as MonthlyOneOnOneRow);
+    }
+
+    const { data, error } = await supabase
+      .from("monthly_one_on_ones")
+      .insert({
+        internship_id: internshipId,
+        mentor_id: mentorId,
+        month,
+        year,
+        ...notesPayload,
+        status: "not_started",
+      })
+      .select("*")
+      .single();
+    if (error || !data)
+      throw new Error(error?.message ?? "Failed to create 1-on-1");
+    return toOneOnOne(data as MonthlyOneOnOneRow);
+  }
+
+  async setOneOnOneStatus(
+    id: string,
+    status: OneOnOneStatus,
+  ): Promise<MonthlyOneOnOne> {
+    const supabase = await this.db();
+    let completedAt: string | null = null;
+    if (status === "completed") {
+      const { data: existing } = await supabase
+        .from("monthly_one_on_ones")
+        .select("completed_at")
+        .eq("id", id)
+        .maybeSingle();
+      completedAt =
+        (existing as { completed_at: string | null } | null)?.completed_at ??
+        new Date().toISOString();
+    }
+    const { data, error } = await supabase
+      .from("monthly_one_on_ones")
+      .update({ status, completed_at: completedAt })
+      .eq("id", id)
+      .select("*")
+      .single();
+    if (error || !data)
+      throw new Error(error?.message ?? "Failed to update 1-on-1 status");
+    return toOneOnOne(data as MonthlyOneOnOneRow);
   }
 }

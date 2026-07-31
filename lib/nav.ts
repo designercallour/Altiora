@@ -3,6 +3,7 @@ import {
   GraduationCap,
   LayoutDashboard,
   Layers,
+  MessagesSquare,
   NotebookPen,
   Settings,
   UsersRound,
@@ -40,6 +41,13 @@ export const PRIMARY_NAV: NavItem[] = [
     icon: NotebookPen,
     description: "Reflect on your week",
     roles: ["intern"],
+  },
+  {
+    label: "Monthly 1-on-1",
+    href: ROUTES.oneOnOnes,
+    icon: MessagesSquare,
+    description: "Monthly mentor check-ins",
+    roles: ["admin", "mentor", "intern"],
   },
   {
     label: "Interns",
