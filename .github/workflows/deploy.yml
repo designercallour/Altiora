@@ -1,0 +1,84 @@
+name: Migrate & Deploy (production)
+
+# Runs only when code lands on main (i.e. a PR is merged). The database
+# migrations are applied FIRST; the Vercel production deploy only happens if
+# they succeed. Vercel's own Git auto-deploy is disabled (see vercel.json), so
+# this workflow is the single path to production — a build can never ship ahead
+# of its schema.
+on:
+  push:
+    branches: [main]
+
+# One production release at a time. Never cancel a run mid-migration.
+concurrency:
+  group: production-release
+  cancel-in-progress: false
+
+permissions:
+  contents: read
+
+jobs:
+  migrate-and-deploy:
+    name: Migrate database, then deploy
+    runs-on: ubuntu-latest
+    environment: production
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      # ── 1. Database migrations (must succeed before anything deploys) ────────
+      - name: Set up Supabase CLI
+        uses: supabase/setup-cli@v1
+        with:
+          version: latest
+
+      - name: Apply Supabase migrations to production
+        env:
+          SUPABASE_ACCESS_TOKEN: ${{ secrets.SUPABASE_ACCESS_TOKEN }}
+          SUPABASE_DB_PASSWORD: ${{ secrets.SUPABASE_DB_PASSWORD }}
+          SUPABASE_PROJECT_REF: ${{ secrets.SUPABASE_PROJECT_REF }}
+        run: |
+          set -euo pipefail
+          supabase link --project-ref "$SUPABASE_PROJECT_REF"
+          # Show what will run, then apply. db push is idempotent: it only
+          # applies migrations not already recorded in the remote history.
+          supabase migration list --linked || true
+          supabase db push --linked
+          echo "Migrations applied. Verifying tracked history:"
+          supabase migration list --linked
+
+      # ── 2. Production deploy (only reached if migrations succeeded) ──────────
+      - name: Install Vercel CLI
+        run: npm install --global vercel@latest
+
+      - name: Build & deploy to Vercel (production)
+        env:
+          VERCEL_TOKEN: ${{ secrets.VERCEL_TOKEN }}
+          VERCEL_ORG_ID: ${{ secrets.VERCEL_ORG_ID }}
+          VERCEL_PROJECT_ID: ${{ secrets.VERCEL_PROJECT_ID }}
+        run: |
+          set -euo pipefail
+          vercel pull --yes --environment=production --token="$VERCEL_TOKEN"
+          vercel build --prod --token="$VERCEL_TOKEN"
+          url=$(vercel deploy --prebuilt --prod --token="$VERCEL_TOKEN")
+          echo "Deployed: $url"
+          echo "DEPLOY_URL=$url" >> "$GITHUB_ENV"
+
+      # ── 3. Verify production is live and healthy ────────────────────────────
+      - name: Verify production
+        env:
+          PROD_URL: https://interns.callourstudio.com
+        run: |
+          set -uo pipefail
+          echo "Health-checking $PROD_URL ..."
+          for i in $(seq 1 6); do
+            code=$(curl -sS -o /dev/null -w "%{http_code}" --max-time 20 "$PROD_URL" || echo "000")
+            echo "attempt $i: HTTP $code"
+            if [ "$code" = "200" ]; then
+              echo "Production is healthy."
+              exit 0
+            fi
+            sleep 10
+          done
+          echo "::error::Production health check did not return 200."
+          exit 1
