@@ -12,6 +12,9 @@ export function defaultFormValues(): ReportFormValues {
     mentorHelp: "",
     confidence: null,
     workingHours: null,
+    playbackCompleted: false,
+    instagramStoryCompleted: false,
+    instagramStoryUrl: null,
     skillScores: [],
     learningLogs: [],
   };
@@ -30,6 +33,9 @@ export function formValuesFromReport(
     mentorHelp: report.mentorHelp ?? "",
     confidence: report.confidence,
     workingHours: report.workingHours,
+    playbackCompleted: report.playbackCompleted,
+    instagramStoryCompleted: report.instagramStoryCompleted,
+    instagramStoryUrl: report.instagramStoryUrl,
     skillScores: report.skillScores.map((s) => ({
       skillId: s.skillId,
       score: s.score,

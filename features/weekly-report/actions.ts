@@ -54,6 +54,9 @@ function toScalars(v: ReportFormValues) {
     mentorHelp: nullIfEmpty(v.mentorHelp),
     confidence: v.confidence,
     workingHours: v.workingHours,
+    playbackCompleted: v.playbackCompleted,
+    instagramStoryCompleted: v.instagramStoryCompleted,
+    instagramStoryUrl: v.instagramStoryUrl,
   };
 }
 

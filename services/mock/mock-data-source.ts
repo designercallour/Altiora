@@ -18,7 +18,11 @@ import type {
   MentorAssignmentDetail,
   MentorFeedback,
   MentorSummary,
+  MonthlyOneOnOne,
   NotificationRecord,
+  OneOnOneContext,
+  OneOnOneListItem,
+  OneOnOneStatus,
   UserRole,
   WeeklyReport,
   WeeklyReportDetail,
@@ -35,11 +39,17 @@ import type {
   MentorInput,
   MentorUpdate,
   NotificationInput,
+  OneOnOneNotesInput,
+  OneOnOneQuery,
   ReportInput,
   ReportQuery,
   ReportUpdate,
 } from "@/services/data-source";
 import { internshipStatus } from "@/lib/internship";
+import {
+  reflectionsInMonth,
+  summarizeReflections,
+} from "@/lib/one-on-one";
 import { generateDataset, type MockDataset } from "./generate";
 
 const nowIso = () => new Date().toISOString();
@@ -645,6 +655,9 @@ export class MockDataSource implements DataSource {
       mentorHelp: input.mentorHelp,
       confidence: input.confidence,
       workingHours: input.workingHours,
+      playbackCompleted: input.playbackCompleted,
+      instagramStoryCompleted: input.instagramStoryCompleted,
+      instagramStoryUrl: input.instagramStoryUrl,
       status: "draft",
       submittedAt: null,
       reviewedAt: null,
@@ -677,6 +690,9 @@ export class MockDataSource implements DataSource {
       "mentorHelp",
       "confidence",
       "workingHours",
+      "playbackCompleted",
+      "instagramStoryCompleted",
+      "instagramStoryUrl",
     ] as const;
     const src = patch as Record<string, unknown>;
     const dst = report as unknown as Record<string, unknown>;
@@ -822,5 +838,172 @@ export class MockDataSource implements DataSource {
         score: score.score,
       });
     }
+  }
+
+  // ── monthly 1-on-1 ────────────────────────────────────────────────────────
+  private internshipById(id: string): Internship | null {
+    return (
+      this.db.internships.find((i) => i.id === id && i.deletedAt == null) ??
+      null
+    );
+  }
+
+  private userLite(
+    id: string | null,
+  ): { id: string; fullName: string; avatarUrl: string | null } | null {
+    const u = id ? this.db.users.find((x) => x.id === id) : null;
+    return u ? { id: u.id, fullName: u.fullName, avatarUrl: u.avatarUrl } : null;
+  }
+
+  private oneOnOneListItem(rec: MonthlyOneOnOne): OneOnOneListItem | null {
+    const internship = this.internshipById(rec.internshipId);
+    if (!internship) return null;
+    const intern = this.userLite(internship.userId);
+    if (!intern) return null;
+    return {
+      id: rec.id,
+      internshipId: rec.internshipId,
+      intern,
+      mentor: this.userLite(internship.mentorId),
+      month: rec.month,
+      year: rec.year,
+      status: rec.status,
+      completedAt: rec.completedAt,
+      updatedAt: rec.updatedAt,
+    };
+  }
+
+  private buildOneOnOneContext(
+    internship: Internship,
+    year: number,
+    month: number,
+    record: MonthlyOneOnOne | null,
+  ): OneOnOneContext {
+    const intern = this.userLite(internship.userId)!;
+    const cohort =
+      (internship.cohortId &&
+        this.db.cohorts.find((c) => c.id === internship.cohortId)) ||
+      null;
+    const monthReports = reflectionsInMonth(
+      this.activeReports().filter((r) => r.internshipId === internship.id),
+      year,
+      month,
+    );
+    return {
+      internshipId: internship.id,
+      intern,
+      position: internship.position,
+      cohort,
+      mentor: this.userLite(internship.mentorId),
+      month,
+      year,
+      record,
+      reflectionSummary: summarizeReflections(monthReports),
+    };
+  }
+
+  async listOneOnOnes(query: OneOnOneQuery = {}): Promise<OneOnOneListItem[]> {
+    const items = this.db.oneOnOnes
+      .filter((rec) => {
+        const internship = this.internshipById(rec.internshipId);
+        if (!internship) return false;
+        if (query.internshipId && rec.internshipId !== query.internshipId)
+          return false;
+        if (query.mentorId && internship.mentorId !== query.mentorId)
+          return false;
+        if (query.internUserId && internship.userId !== query.internUserId)
+          return false;
+        if (query.year != null && rec.year !== query.year) return false;
+        if (query.month != null && rec.month !== query.month) return false;
+        if (query.status && rec.status !== query.status) return false;
+        return true;
+      })
+      .map((rec) => this.oneOnOneListItem(rec))
+      .filter((x): x is OneOnOneListItem => x !== null)
+      .sort((a, b) => b.year - a.year || b.month - a.month);
+    return clone(items);
+  }
+
+  async getOneOnOneById(id: string): Promise<OneOnOneContext | null> {
+    const record = this.db.oneOnOnes.find((r) => r.id === id) ?? null;
+    if (!record) return null;
+    const internship = this.internshipById(record.internshipId);
+    if (!internship) return null;
+    return clone(
+      this.buildOneOnOneContext(internship, record.year, record.month, record),
+    );
+  }
+
+  async getOneOnOneContext(
+    internshipId: string,
+    year: number,
+    month: number,
+  ): Promise<OneOnOneContext | null> {
+    const internship = this.internshipById(internshipId);
+    if (!internship) return null;
+    const record =
+      this.db.oneOnOnes.find(
+        (r) =>
+          r.internshipId === internshipId &&
+          r.year === year &&
+          r.month === month,
+      ) ?? null;
+    return clone(this.buildOneOnOneContext(internship, year, month, record));
+  }
+
+  async upsertOneOnOne(
+    internshipId: string,
+    year: number,
+    month: number,
+    notes: OneOnOneNotesInput,
+    mentorId: string | null,
+  ): Promise<MonthlyOneOnOne> {
+    const internship = this.internshipById(internshipId);
+    if (!internship) throw new Error(`Internship ${internshipId} not found.`);
+    const now = nowIso();
+    const existing = this.db.oneOnOnes.find(
+      (r) =>
+        r.internshipId === internshipId &&
+        r.year === year &&
+        r.month === month,
+    );
+    if (existing) {
+      existing.strengths = notes.strengths;
+      existing.concerns = notes.concerns;
+      existing.goalsNextMonth = notes.goalsNextMonth;
+      if (mentorId) existing.mentorId = mentorId;
+      existing.updatedAt = now;
+      return clone(existing);
+    }
+    const created: MonthlyOneOnOne = {
+      id: crypto.randomUUID(),
+      internshipId,
+      mentorId: mentorId ?? internship.mentorId,
+      month,
+      year,
+      strengths: notes.strengths,
+      concerns: notes.concerns,
+      goalsNextMonth: notes.goalsNextMonth,
+      status: "not_started",
+      completedAt: null,
+      createdAt: now,
+      updatedAt: now,
+    };
+    this.db.oneOnOnes.push(created);
+    return clone(created);
+  }
+
+  async setOneOnOneStatus(
+    id: string,
+    status: OneOnOneStatus,
+  ): Promise<MonthlyOneOnOne> {
+    const record = this.db.oneOnOnes.find((r) => r.id === id);
+    if (!record) throw new Error(`One-on-one ${id} not found.`);
+    const now = nowIso();
+    record.status = status;
+    record.completedAt =
+      status === "completed" ? (record.completedAt ?? now) : null;
+    record.updatedAt = now;
+    return clone(record);
   }
 }

@@ -37,6 +37,11 @@ export const reportFormSchema = z.object({
   mentorHelp: z.string().max(2000),
   confidence: z.number().int().min(1).max(10).nullable(),
   workingHours: z.number().min(0).max(168).nullable(),
+  // Optional weekly confirmations — never block submission.
+  playbackCompleted: z.boolean(),
+  instagramStoryCompleted: z.boolean(),
+  /** Storage path/URL of the uploaded Instagram Story proof, or null. */
+  instagramStoryUrl: z.string().nullable(),
   skillScores: z.array(skillScoreInputSchema),
   learningLogs: z.array(learningLogInputSchema),
 });

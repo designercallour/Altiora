@@ -10,7 +10,12 @@
  * Everything else uses the camelCase domain types in `types/domain.ts`.
  */
 
-import type { InternshipStatus, ReportStatus, UserRole } from "@/types/domain";
+import type {
+  InternshipStatus,
+  OneOnOneStatus,
+  ReportStatus,
+  UserRole,
+} from "@/types/domain";
 
 export interface DepartmentRow {
   id: string;
@@ -167,6 +172,9 @@ export interface WeeklyReportRow {
   mentor_help: string | null;
   confidence: number | null;
   working_hours: number | null;
+  playback_completed: boolean;
+  instagram_story_completed: boolean;
+  instagram_story_url: string | null;
   status: ReportStatus;
   submitted_at: string | null;
   reviewed_at: string | null;
@@ -210,4 +218,19 @@ export interface MentorFeedbackRow {
   created_at: string;
   updated_at: string;
   deleted_at: string | null;
+}
+
+export interface MonthlyOneOnOneRow {
+  id: string;
+  internship_id: string;
+  mentor_id: string | null;
+  month: number;
+  year: number;
+  strengths: string | null;
+  concerns: string | null;
+  goals_next_month: string | null;
+  status: OneOnOneStatus;
+  completed_at: string | null;
+  created_at: string;
+  updated_at: string;
 }
