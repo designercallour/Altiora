@@ -4,11 +4,11 @@ import { NotebookPen } from "lucide-react";
 import { getCurrentUser } from "@/lib/session";
 import { getDataSource } from "@/services";
 import {
-  weekRange,
   weekRangeOf,
   weekKey,
   formatInternshipWeekLabel,
   isWeeklyReflectionOpen,
+  currentReflectionWeek,
 } from "@/lib/week";
 import { PageContainer } from "@/components/shared/page-container";
 import { PageHeader } from "@/components/shared/page-header";
@@ -51,7 +51,7 @@ export default async function NewReportPage({
   }
 
   const now = new Date();
-  const current = weekRange(now);
+  const current = currentReflectionWeek(now);
 
   // A `?year&week` override lets an intern file a past-week catch-up (e.g. the
   // one-time Week 29 reflection) — a past week within their internship. Past

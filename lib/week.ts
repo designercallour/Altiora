@@ -74,6 +74,20 @@ export function isWeeklyReflectionOpen(now: Date = new Date()): boolean {
   return false;
 }
 
+/**
+ * The current reflection week, resolved in **WIB**. The weekly ritual runs on a
+ * WIB Friday→Sunday window, but the server runs in UTC — so a plain
+ * `weekRange(new Date())` reports the *previous* ISO week during the Mon
+ * 00:00–07:00 WIB gap (UTC is still on Sunday). That skew makes the just-ended
+ * week look like the "current" week, which wrongly blocks catch-up on it and
+ * locks it out (its Fri→Sun window has already closed). Shifting to WIB first
+ * keeps the week boundary aligned with the window. Assumes the server processes
+ * time in UTC (Vercel default), matching `isWeeklyReflectionOpen`.
+ */
+export function currentReflectionWeek(now: Date = new Date()): WeekRange {
+  return weekRange(new Date(now.getTime() + WIB_OFFSET_MS));
+}
+
 /** e.g. "Week 3 · Jan 12 – Jan 18". */
 export function formatWeekLabel(range: WeekRange): string {
   const start = new Date(`${range.startDate}T00:00:00Z`);

@@ -13,7 +13,7 @@ import {
   reflectionCorpus,
 } from "@/services/ai/learning-intelligence";
 import { isInternshipActive } from "@/lib/internship";
-import { weekRange, isWeeklyReflectionOpen } from "@/lib/week";
+import { currentReflectionWeek, isWeeklyReflectionOpen } from "@/lib/week";
 import { ROUTES } from "@/lib/constants";
 
 const REFLECTION_LOCKED_MSG =
@@ -24,7 +24,7 @@ const REFLECTION_LOCKED_MSG =
  * (Fri 09:00 WIB → Sun). Past weeks are unaffected. Server-side source of truth.
  */
 function reflectionLocked(year: number, week: number, now = new Date()): boolean {
-  const cw = weekRange(now);
+  const cw = currentReflectionWeek(now);
   const isCurrentWeek = year === cw.year && week === cw.week;
   return isCurrentWeek && !isWeeklyReflectionOpen(now);
 }
