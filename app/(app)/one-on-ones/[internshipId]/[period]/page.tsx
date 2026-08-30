@@ -1,12 +1,18 @@
 import type { Metadata } from "next";
 import { notFound, redirect } from "next/navigation";
-import { ArrowLeft, MessagesSquare, NotebookText } from "lucide-react";
+import {
+  ArrowLeft,
+  CalendarClock,
+  MessagesSquare,
+  NotebookText,
+} from "lucide-react";
 import { getCurrentUser } from "@/lib/session";
 import { getDataSource } from "@/services";
-import { parsePeriod, monthLabel } from "@/lib/one-on-one";
+import { parsePeriod, monthLabel, isOneOnOneOpen } from "@/lib/one-on-one";
 import { ROUTES } from "@/lib/constants";
 import { PageContainer } from "@/components/shared/page-container";
 import { PageHeader } from "@/components/shared/page-header";
+import { EmptyState } from "@/components/shared/empty-state";
 import { SectionHeader } from "@/components/shared/section-header";
 import { LinkButton } from "@/components/shared/link-button";
 import { Reveal } from "@/components/shared/motion";
@@ -40,6 +46,33 @@ export default async function OneOnOneEditorPage({
     user.role === "admin" ||
     (user.role === "mentor" && internship.mentorId === user.id);
   if (!allowed) notFound();
+
+  // The month's 1-on-1 only opens in its final week (past months stay open for
+  // catch-up; future months are locked). Mirrors the server-action guard.
+  if (!isOneOnOneOpen(parsed.year, parsed.month)) {
+    return (
+      <PageContainer>
+        <PageHeader
+          eyebrow={monthLabel(parsed.year, parsed.month)}
+          title="Monthly 1-on-1"
+          description="This month's check-in opens in the final week of the month."
+          actions={
+            <LinkButton href={ROUTES.oneOnOnes} variant="ghost" size="sm">
+              <ArrowLeft />
+              Back
+            </LinkButton>
+          }
+        />
+        <div className="mt-8">
+          <EmptyState
+            icon={CalendarClock}
+            title="This 1-on-1 isn't open yet"
+            description="Monthly 1-on-1s can only be filled in the last week of the month. Check back then to capture this check-in."
+          />
+        </div>
+      </PageContainer>
+    );
+  }
 
   const ctx = await db.getOneOnOneContext(
     internshipId,
