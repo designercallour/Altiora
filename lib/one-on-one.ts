@@ -72,6 +72,65 @@ export function currentPeriod(now: Date = new Date()): {
   return { year: now.getUTCFullYear(), month: now.getUTCMonth() + 1 };
 }
 
+const WIB_OFFSET_MS = 7 * 60 * 60 * 1000; // WIB = UTC+7
+
+/** How many days before month-end the 1-on-1 window opens (inclusive). */
+export const ONE_ON_ONE_WINDOW_DAYS = 7;
+
+/** Last calendar day (1-based) of the given month. */
+function lastDayOfMonth(year: number, month: number): number {
+  return new Date(Date.UTC(year, month, 0)).getUTCDate();
+}
+
+/**
+ * First day (1-based) of a month's 1-on-1 fill window — the last
+ * `ONE_ON_ONE_WINDOW_DAYS` days of the month. e.g. a 31-day month opens on the
+ * 25th (25–31 inclusive).
+ */
+export function oneOnOneWindowStartDay(year: number, month: number): number {
+  return lastDayOfMonth(year, month) - ONE_ON_ONE_WINDOW_DAYS + 1;
+}
+
+/**
+ * Is a month's 1-on-1 writable right now? The check-in is an end-of-month
+ * ritual: a month only opens during its final week. Because any *past* month's
+ * window start is already behind us, the same rule keeps past months open for
+ * catch-up while the current month stays locked until its final week and future
+ * months stay closed. Evaluated in WIB, mirroring the weekly reflection ritual.
+ */
+export function isOneOnOneOpen(
+  year: number,
+  month: number,
+  now: Date = new Date(),
+): boolean {
+  const wib = new Date(now.getTime() + WIB_OFFSET_MS);
+  const ty = wib.getUTCFullYear();
+  const tm = wib.getUTCMonth() + 1;
+  const td = wib.getUTCDate();
+  if (ty !== year) return ty > year; // later year → past month → open
+  if (tm !== month) return tm > month; // later month → past month → open
+  return td >= oneOnOneWindowStartDay(year, month); // this month → only final week
+}
+
+/**
+ * The latest month whose 1-on-1 is currently "due" — the check-in a mentor is
+ * expected to act on now. Inside the current month's window it's this month;
+ * before the window it's the previous month (last month's check-in stays the
+ * actionable one until this month's final week arrives). WIB-based.
+ */
+export function dueOneOnOnePeriod(now: Date = new Date()): {
+  year: number;
+  month: number;
+} {
+  const wib = new Date(now.getTime() + WIB_OFFSET_MS);
+  const year = wib.getUTCFullYear();
+  const month = wib.getUTCMonth() + 1;
+  if (isOneOnOneOpen(year, month, now)) return { year, month };
+  return month === 1
+    ? { year: year - 1, month: 12 }
+    : { year, month: month - 1 };
+}
+
 /**
  * A report belongs to a month if its week [startDate, endDate] overlaps the
  * calendar month — weeks straddling a boundary are counted in both months.

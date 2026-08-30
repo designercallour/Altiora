@@ -7,7 +7,20 @@ import {
   oneOnOneNotesSchema,
   type OneOnOneNotesValues,
 } from "@/schemas/one-on-one";
+import { isOneOnOneOpen, monthLabel } from "@/lib/one-on-one";
 import { ROUTES } from "@/lib/constants";
+
+/**
+ * A month's 1-on-1 is only writable from its final week onward (past months
+ * stay open for catch-up; future months are locked). Server-side source of
+ * truth — never trust the client gate.
+ */
+function windowClosed(year: number, month: number): boolean {
+  return !isOneOnOneOpen(year, month);
+}
+
+const windowClosedMsg = (year: number, month: number) =>
+  `The ${monthLabel(year, month)} 1-on-1 opens in the final week of the month.`;
 
 export interface OneOnOnePayload {
   internshipId: string;
@@ -71,6 +84,9 @@ export async function saveOneOnOneDraft(
 ): Promise<OneOnOneResult> {
   const g = await guard(payload.internshipId);
   if (!g.ok) return g;
+  if (windowClosed(payload.year, payload.month)) {
+    return { ok: false, error: windowClosedMsg(payload.year, payload.month) };
+  }
   const parsed = oneOnOneNotesSchema.safeParse(payload.values);
   if (!parsed.success) {
     return {
@@ -96,6 +112,9 @@ export async function completeOneOnOne(
 ): Promise<OneOnOneResult> {
   const g = await guard(payload.internshipId);
   if (!g.ok) return g;
+  if (windowClosed(payload.year, payload.month)) {
+    return { ok: false, error: windowClosedMsg(payload.year, payload.month) };
+  }
   const parsed = oneOnOneNotesSchema.safeParse(payload.values);
   if (!parsed.success) {
     return {

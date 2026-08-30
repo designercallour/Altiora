@@ -5,7 +5,7 @@ import { ArrowRight, MessagesSquare } from "lucide-react";
 import { getCurrentUser } from "@/lib/session";
 import { getDataSource } from "@/services";
 import { internshipStatus } from "@/lib/internship";
-import { currentPeriod, monthLabel } from "@/lib/one-on-one";
+import { dueOneOnOnePeriod, monthLabel } from "@/lib/one-on-one";
 import { formatDate } from "@/lib/format";
 import { ROUTES } from "@/lib/constants";
 import { PageContainer } from "@/components/shared/page-container";
@@ -21,15 +21,16 @@ import type { DataSource } from "@/services/data-source";
 export const metadata: Metadata = { title: "Monthly 1-on-1" };
 
 /**
- * Merge existing records with a synthesized "Not started" row for the current
- * month, for every active intern in scope — so mentors see who still needs
- * this month's check-in.
+ * Merge existing records with a synthesized "Not started" row for the currently
+ * *due* month, for every active intern in scope — so mentors see who still needs
+ * this cycle's check-in. The due month only advances to the current month once
+ * its final-week window opens; before that it stays on the previous month.
  */
 async function buildManagementRows(
   db: DataSource,
   scope: { mentorId?: string },
 ): Promise<OneOnOneListItem[]> {
-  const cur = currentPeriod();
+  const due = dueOneOnOnePeriod();
   const [existing, interns] = await Promise.all([
     db.listOneOnOnes(scope.mentorId ? { mentorId: scope.mentorId } : {}),
     db.listInterns(scope.mentorId ? { mentorId: scope.mentorId } : {}),
@@ -42,7 +43,7 @@ async function buildManagementRows(
   for (const s of interns) {
     if (!s.internship) continue;
     if (internshipStatus(s.internship) !== "active") continue;
-    if (seen.has(key(s.internship.id, cur.year, cur.month))) continue;
+    if (seen.has(key(s.internship.id, due.year, due.month))) continue;
     synthesized.push({
       id: null,
       internshipId: s.internship.id,
@@ -52,8 +53,8 @@ async function buildManagementRows(
         avatarUrl: s.user.avatarUrl,
       },
       mentor: s.mentor,
-      month: cur.month,
-      year: cur.year,
+      month: due.month,
+      year: due.year,
       status: "not_started",
       completedAt: null,
       updatedAt: null,
