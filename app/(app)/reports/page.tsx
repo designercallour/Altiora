@@ -4,6 +4,7 @@ import { ArrowRight, NotebookPen, PenLine } from "lucide-react";
 import { getCurrentUser } from "@/lib/session";
 import { getDataSource } from "@/services";
 import { weekRange, internshipWeekNumber } from "@/lib/week";
+import { isInternshipActive } from "@/lib/internship";
 import { PageContainer } from "@/components/shared/page-container";
 import { PageHeader } from "@/components/shared/page-header";
 import { SectionHeader } from "@/components/shared/section-header";
@@ -45,31 +46,40 @@ export default async function ReportsPage() {
     );
   }
 
+  const active = isInternshipActive(internship);
   const reports = await db.listReports({ internshipId: internship.id });
   const cw = weekRange(new Date());
-  const current = reports.find(
-    (r) => r.year === cw.year && r.weekNumber === cw.week,
-  );
-  const history = reports.filter(
-    (r) => !(r.year === cw.year && r.weekNumber === cw.week),
-  );
+  const current = active
+    ? reports.find((r) => r.year === cw.year && r.weekNumber === cw.week)
+    : undefined;
+  // When the internship has ended, every report is history (read-only).
+  const history = active
+    ? reports.filter((r) => !(r.year === cw.year && r.weekNumber === cw.week))
+    : reports;
 
   return (
     <PageContainer>
       <Reveal>
         <PageHeader
           title="Weekly Reports"
-          description="One reflection each week — your record of growth across the internship."
+          description={
+            active
+              ? "One reflection each week — your record of growth across the internship."
+              : "Your reflections from the internship — a record of how you grew, week by week."
+          }
           actions={
-            <LinkButton href={ROUTES.newReport}>
-              <NotebookPen />
-              {current ? "This week's report" : "New report"}
-            </LinkButton>
+            active ? (
+              <LinkButton href={ROUTES.newReport}>
+                <NotebookPen />
+                {current ? "This week's report" : "New report"}
+              </LinkButton>
+            ) : undefined
           }
         />
       </Reveal>
 
-      {/* This week */}
+      {/* This week — only while the internship is active */}
+      {active ? (
       <Reveal delay={0.04}>
         <Card className="mt-8">
           <CardContent className="flex flex-col gap-4 sm:flex-row sm:items-center sm:justify-between">
@@ -110,12 +120,17 @@ export default async function ReportsPage() {
           </CardContent>
         </Card>
       </Reveal>
+      ) : null}
 
       {/* History */}
       <section className="mt-10 space-y-4">
         <SectionHeader
           title="History"
-          description="Your submitted reflections, most recent first"
+          description={
+            active
+              ? "Your submitted reflections, most recent first"
+              : "All your reflections, most recent first"
+          }
           icon={NotebookPen}
         />
         {history.length === 0 ? (

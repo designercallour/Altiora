@@ -1,4 +1,5 @@
 import Link from "next/link";
+import { redirect } from "next/navigation";
 import { format } from "date-fns";
 import {
   ArrowRight,
@@ -14,7 +15,7 @@ import {
   isWeeklyReflectionOpen,
   internshipWeekNumber,
 } from "@/lib/week";
-import { internshipLifecycle } from "@/lib/internship";
+import { internshipLifecycle, isInternshipActive } from "@/lib/internship";
 import { ReminderBanner } from "@/features/notifications/components/reminder-banner";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { PageContainer } from "@/components/shared/page-container";
@@ -22,7 +23,6 @@ import { PageHeader } from "@/components/shared/page-header";
 import { SectionHeader } from "@/components/shared/section-header";
 import { StatCard } from "@/components/shared/stat-card";
 import { InsightCard } from "@/components/shared/insight-card";
-import { EmptyState } from "@/components/shared/empty-state";
 import { BarList } from "@/components/shared/bar-list";
 import { LinkButton } from "@/components/shared/link-button";
 import { Reveal, Stagger, StaggerItem } from "@/components/shared/motion";
@@ -52,22 +52,12 @@ export async function InternDashboard({ user }: { user: AppUser }) {
   const firstName = user.fullName.split(" ")[0] ?? "there";
   const internship = await db.getActiveInternshipForUser(user.id);
 
-  if (!internship) {
-    return (
-      <PageContainer>
-        <PageHeader
-          eyebrow={format(now, "EEEE, MMMM d")}
-          title={`${greeting(now)}, ${firstName}`}
-        />
-        <div className="mt-8">
-          <EmptyState
-            icon={Sparkles}
-            title="No active internship yet"
-            description="Your growth workspace will come alive here once your internship begins."
-          />
-        </div>
-      </PageContainer>
-    );
+  // The dashboard is the live workspace — it only applies while the internship
+  // is active. Before it starts / after it ends, the intern's home is the
+  // celebration + alumni page. (They keep read-only access to Weekly Reports,
+  // Monthly 1-on-1, and Offboarding via the sidebar.)
+  if (!internship || !isInternshipActive(internship)) {
+    redirect(ROUTES.internshipComplete);
   }
 
   const [details, mentor, reminders] = await Promise.all([

@@ -1,6 +1,15 @@
 import type { Metadata } from "next";
+import Link from "next/link";
 import { redirect } from "next/navigation";
-import { GraduationCap, Sparkles, LogOut, Award } from "lucide-react";
+import {
+  GraduationCap,
+  Sparkles,
+  LogOut,
+  Award,
+  NotebookPen,
+  DoorOpen,
+  ArrowRight,
+} from "lucide-react";
 import { getCurrentUser } from "@/lib/session";
 import { getDataSource } from "@/services";
 import { signOut } from "@/features/auth/actions";
@@ -8,7 +17,6 @@ import { BrandMark } from "@/components/layout/brand";
 import { internshipLifecycle } from "@/lib/internship";
 import { formatDate } from "@/lib/format";
 import { ROUTES } from "@/lib/constants";
-import { OffboardingRecordView } from "@/features/offboarding/components/offboarding-record-view";
 
 export const metadata: Metadata = { title: "Internship complete" };
 
@@ -28,17 +36,6 @@ export default async function InternshipCompletePage() {
   if (user.role !== "intern" || life?.status === "active") {
     redirect(ROUTES.dashboard);
   }
-
-  // A completed intern is redirected here from the app, so this is where they
-  // read their exit 1-on-1 (its record page lives behind the app's guard).
-  const offboardings = await db.listOffboardings({
-    internUserId: user.id,
-    status: "completed",
-  });
-  const offboardingId = offboardings[0]?.id ?? null;
-  const offboarding = offboardingId
-    ? await db.getOffboardingById(offboardingId)
-    : null;
 
   const firstName = user.fullName.split(" ")[0] ?? "there";
   const notStarted = life?.phase === "upcoming";
@@ -103,30 +100,40 @@ export default async function InternshipCompletePage() {
           </p>
         ) : null}
 
+        {/* Read-only access to their record */}
+        {!notStarted ? (
+          <div className="mx-auto mt-8 grid max-w-sm gap-2.5 text-left">
+            <Link
+              href={ROUTES.reports}
+              className="group border-border bg-card hover:border-primary/30 focus-visible:ring-ring/50 flex items-center gap-3 rounded-xl border p-4 transition-colors outline-none focus-visible:ring-2"
+            >
+              <span className="bg-primary/10 text-primary flex size-9 shrink-0 items-center justify-center rounded-lg">
+                <NotebookPen className="size-4.5" />
+              </span>
+              <span className="flex-1 text-sm font-medium">
+                Weekly Reflections
+              </span>
+              <ArrowRight className="text-muted-foreground size-4 shrink-0 transition-transform group-hover:translate-x-0.5" />
+            </Link>
+            <Link
+              href={ROUTES.offboarding}
+              className="group border-border bg-card hover:border-primary/30 focus-visible:ring-ring/50 flex items-center gap-3 rounded-xl border p-4 transition-colors outline-none focus-visible:ring-2"
+            >
+              <span className="bg-primary/10 text-primary flex size-9 shrink-0 items-center justify-center rounded-lg">
+                <DoorOpen className="size-4.5" />
+              </span>
+              <span className="flex-1 text-sm font-medium">Offboarding</span>
+              <ArrowRight className="text-muted-foreground size-4 shrink-0 transition-transform group-hover:translate-x-0.5" />
+            </Link>
+          </div>
+        ) : null}
+
         {/* Alumni placeholder */}
         {!notStarted ? (
           <div className="border-border/70 text-muted-foreground mx-auto mt-8 max-w-sm rounded-xl border border-dashed px-4 py-3 text-xs">
             🎓 An Alumni space — your growth story, past reflections, and the
             community — is coming soon.
           </div>
-        ) : null}
-
-        {/* Exit 1-on-1 — read-only, collapsed by default */}
-        {offboarding?.record ? (
-          <details className="border-border bg-card group mx-auto mt-8 max-w-lg rounded-2xl border text-left">
-            <summary className="flex cursor-pointer items-center justify-between gap-3 px-5 py-4 text-sm font-medium select-none">
-              Your exit 1-on-1
-              <span className="text-muted-foreground text-xs group-open:hidden">
-                View
-              </span>
-              <span className="text-muted-foreground hidden text-xs group-open:inline">
-                Hide
-              </span>
-            </summary>
-            <div className="border-border border-t px-5 py-6">
-              <OffboardingRecordView record={offboarding.record} />
-            </div>
-          </details>
         ) : null}
 
         <form action={signOut} className="mt-10">

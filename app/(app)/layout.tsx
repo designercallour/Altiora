@@ -2,7 +2,6 @@ import { redirect } from "next/navigation";
 import { getCurrentUser } from "@/lib/session";
 import { getDataSource, resolveDataSourceMode } from "@/services";
 import { AppShell } from "@/components/layout/app-shell";
-import { isInternshipActive } from "@/lib/internship";
 import { ROUTES } from "@/lib/constants";
 
 export default async function AppLayout({
@@ -13,15 +12,11 @@ export default async function AppLayout({
   const user = await getCurrentUser();
   if (!user) redirect(ROUTES.login);
 
-  // Access control: an intern may use the app only while their internship is
-  // active (today ∈ [start, end]). Enforced here server-side — never trust the
-  // client. Admins and mentors are not internship-gated.
-  if (user.role === "intern") {
-    const internship = await getDataSource().getActiveInternshipForUser(user.id);
-    if (!isInternshipActive(internship)) {
-      redirect(ROUTES.internshipComplete);
-    }
-  }
+  // Note: interns whose internship isn't active are NOT locked out of the app —
+  // they keep read-only access to their Weekly Reflections, Monthly 1-on-1s, and
+  // Offboarding. Only the Dashboard sends them to the celebration/alumni home
+  // (see the intern dashboard); active-only actions (submitting a reflection)
+  // stay blocked in their own server actions.
 
   // Dev-only persona switcher data (mock mode). Empty in supabase mode.
   const personas =
