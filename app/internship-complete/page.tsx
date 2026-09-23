@@ -8,6 +8,7 @@ import { BrandMark } from "@/components/layout/brand";
 import { internshipLifecycle } from "@/lib/internship";
 import { formatDate } from "@/lib/format";
 import { ROUTES } from "@/lib/constants";
+import { OffboardingRecordView } from "@/features/offboarding/components/offboarding-record-view";
 
 export const metadata: Metadata = { title: "Internship complete" };
 
@@ -15,16 +16,29 @@ export default async function InternshipCompletePage() {
   const user = await getCurrentUser();
   if (!user) redirect(ROUTES.login);
 
+  const db = getDataSource();
+
   // Admins/mentors don't belong here; and an intern whose internship is active
   // should be in the app, not on this page.
   const internship =
     user.role === "intern"
-      ? await getDataSource().getActiveInternshipForUser(user.id)
+      ? await db.getActiveInternshipForUser(user.id)
       : null;
   const life = internship ? internshipLifecycle(internship) : null;
   if (user.role !== "intern" || life?.status === "active") {
     redirect(ROUTES.dashboard);
   }
+
+  // A completed intern is redirected here from the app, so this is where they
+  // read their exit 1-on-1 (its record page lives behind the app's guard).
+  const offboardings = await db.listOffboardings({
+    internUserId: user.id,
+    status: "completed",
+  });
+  const offboardingId = offboardings[0]?.id ?? null;
+  const offboarding = offboardingId
+    ? await db.getOffboardingById(offboardingId)
+    : null;
 
   const firstName = user.fullName.split(" ")[0] ?? "there";
   const notStarted = life?.phase === "upcoming";
@@ -95,6 +109,24 @@ export default async function InternshipCompletePage() {
             🎓 An Alumni space — your growth story, past reflections, and the
             community — is coming soon.
           </div>
+        ) : null}
+
+        {/* Exit 1-on-1 — read-only, collapsed by default */}
+        {offboarding?.record ? (
+          <details className="border-border bg-card group mx-auto mt-8 max-w-lg rounded-2xl border text-left">
+            <summary className="flex cursor-pointer items-center justify-between gap-3 px-5 py-4 text-sm font-medium select-none">
+              Your exit 1-on-1
+              <span className="text-muted-foreground text-xs group-open:hidden">
+                View
+              </span>
+              <span className="text-muted-foreground hidden text-xs group-open:inline">
+                Hide
+              </span>
+            </summary>
+            <div className="border-border border-t px-5 py-6">
+              <OffboardingRecordView record={offboarding.record} />
+            </div>
+          </details>
         ) : null}
 
         <form action={signOut} className="mt-10">

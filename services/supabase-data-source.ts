@@ -26,6 +26,8 @@ import type {
   NotificationInput,
   OneOnOneNotesInput,
   OneOnOneQuery,
+  OffboardingInput,
+  OffboardingQuery,
   ReportInput,
   ReportQuery,
   ReportUpdate,
@@ -40,6 +42,7 @@ import type {
   MentorAssignmentRow,
   MentorFeedbackRow,
   MonthlyOneOnOneRow,
+  InternshipOffboardingRow,
   NotificationRow,
   ProjectRow,
   SkillCategoryRow,
@@ -68,6 +71,10 @@ import type {
   MentorFeedback,
   MentorSummary,
   MonthlyOneOnOne,
+  InternshipOffboarding,
+  OffboardingContext,
+  OffboardingListItem,
+  OffboardingStatus,
   NotificationRecord,
   OneOnOneContext,
   OneOnOneListItem,
@@ -322,6 +329,52 @@ const toOneOnOne = (r: MonthlyOneOnOneRow): MonthlyOneOnOne => ({
   completedAt: r.completed_at,
   createdAt: r.created_at,
   updatedAt: r.updated_at,
+});
+
+const toOffboarding = (
+  r: InternshipOffboardingRow,
+): InternshipOffboarding => ({
+  id: r.id,
+  internshipId: r.internship_id,
+  supervisorId: r.supervisor_id,
+  sessionDate: r.session_date,
+  lastDay: r.last_day,
+  reflectionAchievement: r.reflection_achievement,
+  reflectionChallenge: r.reflection_challenge,
+  reflectionSkill: r.reflection_skill,
+  supervisorFeedback: r.supervisor_feedback,
+  feedbackForSupervisor: r.feedback_for_supervisor,
+  founderFeedback: r.founder_feedback ?? [],
+  feedbackForTeam: r.feedback_for_team,
+  feedbackForStudio: r.feedback_for_studio,
+  wouldRecommend: r.would_recommend,
+  careerPlan: r.career_plan,
+  checklist: r.checklist ?? {},
+  notesKeyPoints: r.notes_key_points,
+  notesFollowUp: r.notes_follow_up,
+  status: r.status,
+  completedAt: r.completed_at,
+  createdAt: r.created_at,
+  updatedAt: r.updated_at,
+});
+
+/** OffboardingInput → snake_case row columns. */
+const offboardingPayload = (input: OffboardingInput) => ({
+  session_date: input.sessionDate,
+  last_day: input.lastDay,
+  reflection_achievement: input.reflectionAchievement,
+  reflection_challenge: input.reflectionChallenge,
+  reflection_skill: input.reflectionSkill,
+  supervisor_feedback: input.supervisorFeedback,
+  feedback_for_supervisor: input.feedbackForSupervisor,
+  founder_feedback: input.founderFeedback,
+  feedback_for_team: input.feedbackForTeam,
+  feedback_for_studio: input.feedbackForStudio,
+  would_recommend: input.wouldRecommend,
+  career_plan: input.careerPlan,
+  checklist: input.checklist,
+  notes_key_points: input.notesKeyPoints,
+  notes_follow_up: input.notesFollowUp,
 });
 
 function toIntelligence(
@@ -1612,5 +1665,215 @@ export class SupabaseDataSource implements DataSource {
     if (error || !data)
       throw new Error(error?.message ?? "Failed to update 1-on-1 status");
     return toOneOnOne(data as MonthlyOneOnOneRow);
+  }
+
+  // ── internship offboarding ──────────────────────────────────────────────────
+  private async buildOffboardingContext(
+    internship: Internship,
+    record: InternshipOffboarding | null,
+  ): Promise<OffboardingContext> {
+    const [internUser, mentorUser, cohort] = await Promise.all([
+      this.getUserById(internship.userId),
+      internship.mentorId
+        ? this.getUserById(internship.mentorId)
+        : Promise.resolve(null),
+      internship.cohortId
+        ? this.getCohortById(internship.cohortId)
+        : Promise.resolve(null),
+    ]);
+    const lite = (u: AppUser | null) =>
+      u ? { id: u.id, fullName: u.fullName, avatarUrl: u.avatarUrl } : null;
+    return {
+      internshipId: internship.id,
+      intern: lite(internUser) ?? {
+        id: internship.userId,
+        fullName: "Unknown intern",
+        avatarUrl: null,
+      },
+      position: internship.position,
+      cohort,
+      mentor: lite(mentorUser),
+      internshipStartDate: internship.startDate,
+      internshipEndDate: internship.endDate,
+      record,
+    };
+  }
+
+  async listOffboardings(
+    query: OffboardingQuery = {},
+  ): Promise<OffboardingListItem[]> {
+    const supabase = await this.db();
+    let q = supabase.from("internship_offboardings").select("*");
+    if (query.internshipId) q = q.eq("internship_id", query.internshipId);
+    if (query.status) q = q.eq("status", query.status);
+    const { data, error } = await q;
+    if (error) throw new Error(error.message);
+
+    let records = (data ?? []) as InternshipOffboardingRow[];
+    if (!records.length) return [];
+
+    const internshipIds = [...new Set(records.map((r) => r.internship_id))];
+    const { data: iRows } = await supabase
+      .from("internships")
+      .select("id, user_id, mentor_id, end_date")
+      .in("id", internshipIds);
+    type ILite = {
+      id: string;
+      user_id: string;
+      mentor_id: string | null;
+      end_date: string | null;
+    };
+    const internships = new Map(
+      ((iRows ?? []) as ILite[]).map((i) => [i.id, i]),
+    );
+
+    if (query.mentorId)
+      records = records.filter(
+        (r) => internships.get(r.internship_id)?.mentor_id === query.mentorId,
+      );
+    if (query.internUserId)
+      records = records.filter(
+        (r) => internships.get(r.internship_id)?.user_id === query.internUserId,
+      );
+
+    const userIds = new Set<string>();
+    for (const r of records) {
+      const i = internships.get(r.internship_id);
+      if (i?.user_id) userIds.add(i.user_id);
+      if (i?.mentor_id) userIds.add(i.mentor_id);
+    }
+    const { data: uRows } = await supabase
+      .from("users")
+      .select("id, full_name, avatar_url")
+      .in("id", [...userIds]);
+    type ULite = { id: string; full_name: string; avatar_url: string | null };
+    const users = new Map(((uRows ?? []) as ULite[]).map((u) => [u.id, u]));
+    const lite = (id: string | null | undefined) => {
+      const u = id ? users.get(id) : null;
+      return u
+        ? { id: u.id, fullName: u.full_name, avatarUrl: u.avatar_url }
+        : null;
+    };
+
+    return records
+      .map((r) => {
+        const i = internships.get(r.internship_id);
+        return {
+          id: r.id,
+          internshipId: r.internship_id,
+          intern: lite(i?.user_id) ?? {
+            id: i?.user_id ?? "",
+            fullName: "Unknown intern",
+            avatarUrl: null,
+          },
+          mentor: lite(i?.mentor_id),
+          lastDay: r.last_day ?? i?.end_date ?? null,
+          status: r.status,
+          completedAt: r.completed_at,
+          updatedAt: r.updated_at,
+        };
+      })
+      .sort((a, b) => (a.lastDay ?? "").localeCompare(b.lastDay ?? ""));
+  }
+
+  async getOffboardingById(id: string): Promise<OffboardingContext | null> {
+    const supabase = await this.db();
+    const { data } = await supabase
+      .from("internship_offboardings")
+      .select("*")
+      .eq("id", id)
+      .maybeSingle();
+    if (!data) return null;
+    const record = toOffboarding(data as InternshipOffboardingRow);
+    const internship = await this.getInternshipById(record.internshipId);
+    if (!internship) return null;
+    return this.buildOffboardingContext(internship, record);
+  }
+
+  async getOffboardingContext(
+    internshipId: string,
+  ): Promise<OffboardingContext | null> {
+    const internship = await this.getInternshipById(internshipId);
+    if (!internship) return null;
+    const supabase = await this.db();
+    const { data } = await supabase
+      .from("internship_offboardings")
+      .select("*")
+      .eq("internship_id", internshipId)
+      .maybeSingle();
+    const record = data
+      ? toOffboarding(data as InternshipOffboardingRow)
+      : null;
+    return this.buildOffboardingContext(internship, record);
+  }
+
+  async upsertOffboarding(
+    internshipId: string,
+    input: OffboardingInput,
+    supervisorId: string | null,
+  ): Promise<InternshipOffboarding> {
+    const supabase = await this.db();
+    const payload = offboardingPayload(input);
+    const { data: existing } = await supabase
+      .from("internship_offboardings")
+      .select("id")
+      .eq("internship_id", internshipId)
+      .maybeSingle();
+
+    if (existing) {
+      const patch = supervisorId
+        ? { ...payload, supervisor_id: supervisorId }
+        : payload;
+      const { data, error } = await supabase
+        .from("internship_offboardings")
+        .update(patch)
+        .eq("id", (existing as { id: string }).id)
+        .select("*")
+        .single();
+      if (error || !data)
+        throw new Error(error?.message ?? "Failed to save offboarding");
+      return toOffboarding(data as InternshipOffboardingRow);
+    }
+
+    const { data, error } = await supabase
+      .from("internship_offboardings")
+      .insert({
+        internship_id: internshipId,
+        supervisor_id: supervisorId,
+        ...payload,
+        status: "not_started",
+      })
+      .select("*")
+      .single();
+    if (error || !data)
+      throw new Error(error?.message ?? "Failed to create offboarding");
+    return toOffboarding(data as InternshipOffboardingRow);
+  }
+
+  async setOffboardingStatus(
+    id: string,
+    status: OffboardingStatus,
+  ): Promise<InternshipOffboarding> {
+    const supabase = await this.db();
+    let completedAt: string | null = null;
+    if (status === "completed") {
+      const { data: existing } = await supabase
+        .from("internship_offboardings")
+        .select("completed_at")
+        .eq("id", id)
+        .maybeSingle();
+      completedAt =
+        (existing as { completed_at: string | null } | null)?.completed_at ??
+        new Date().toISOString();
+    }
+    const { data, error } = await supabase
+      .from("internship_offboardings")
+      .update({ status, completed_at: completedAt })
+      .eq("id", id)
+      .select("*")
+      .single();
+    if (error || !data)
+      throw new Error(error?.message ?? "Failed to update offboarding status");
+    return toOffboarding(data as InternshipOffboardingRow);
   }
 }

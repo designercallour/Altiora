@@ -19,6 +19,10 @@ import type {
   MentorFeedback,
   MentorSummary,
   MonthlyOneOnOne,
+  InternshipOffboarding,
+  OffboardingContext,
+  OffboardingListItem,
+  OffboardingStatus,
   NotificationRecord,
   OneOnOneContext,
   OneOnOneListItem,
@@ -41,6 +45,8 @@ import type {
   NotificationInput,
   OneOnOneNotesInput,
   OneOnOneQuery,
+  OffboardingInput,
+  OffboardingQuery,
   ReportInput,
   ReportQuery,
   ReportUpdate,
@@ -999,6 +1005,132 @@ export class MockDataSource implements DataSource {
   ): Promise<MonthlyOneOnOne> {
     const record = this.db.oneOnOnes.find((r) => r.id === id);
     if (!record) throw new Error(`One-on-one ${id} not found.`);
+    const now = nowIso();
+    record.status = status;
+    record.completedAt =
+      status === "completed" ? (record.completedAt ?? now) : null;
+    record.updatedAt = now;
+    return clone(record);
+  }
+
+  // ── internship offboarding ──────────────────────────────────────────────────
+  private offboardingListItem(
+    rec: InternshipOffboarding,
+  ): OffboardingListItem | null {
+    const internship = this.internshipById(rec.internshipId);
+    if (!internship) return null;
+    const intern = this.userLite(internship.userId);
+    if (!intern) return null;
+    return {
+      id: rec.id,
+      internshipId: rec.internshipId,
+      intern,
+      mentor: this.userLite(internship.mentorId),
+      lastDay: rec.lastDay ?? internship.endDate,
+      status: rec.status,
+      completedAt: rec.completedAt,
+      updatedAt: rec.updatedAt,
+    };
+  }
+
+  private buildOffboardingContext(
+    internship: Internship,
+    record: InternshipOffboarding | null,
+  ): OffboardingContext {
+    const intern = this.userLite(internship.userId)!;
+    const cohort =
+      (internship.cohortId &&
+        this.db.cohorts.find((c) => c.id === internship.cohortId)) ||
+      null;
+    return {
+      internshipId: internship.id,
+      intern,
+      position: internship.position,
+      cohort,
+      mentor: this.userLite(internship.mentorId),
+      internshipStartDate: internship.startDate,
+      internshipEndDate: internship.endDate,
+      record,
+    };
+  }
+
+  async listOffboardings(
+    query: OffboardingQuery = {},
+  ): Promise<OffboardingListItem[]> {
+    const items = this.db.offboardings
+      .filter((rec) => {
+        const internship = this.internshipById(rec.internshipId);
+        if (!internship) return false;
+        if (query.internshipId && rec.internshipId !== query.internshipId)
+          return false;
+        if (query.mentorId && internship.mentorId !== query.mentorId)
+          return false;
+        if (query.internUserId && internship.userId !== query.internUserId)
+          return false;
+        if (query.status && rec.status !== query.status) return false;
+        return true;
+      })
+      .map((rec) => this.offboardingListItem(rec))
+      .filter((x): x is OffboardingListItem => x !== null)
+      .sort((a, b) => (a.lastDay ?? "").localeCompare(b.lastDay ?? ""));
+    return clone(items);
+  }
+
+  async getOffboardingById(id: string): Promise<OffboardingContext | null> {
+    const record = this.db.offboardings.find((r) => r.id === id) ?? null;
+    if (!record) return null;
+    const internship = this.internshipById(record.internshipId);
+    if (!internship) return null;
+    return clone(this.buildOffboardingContext(internship, record));
+  }
+
+  async getOffboardingContext(
+    internshipId: string,
+  ): Promise<OffboardingContext | null> {
+    const internship = this.internshipById(internshipId);
+    if (!internship) return null;
+    const record =
+      this.db.offboardings.find((r) => r.internshipId === internshipId) ?? null;
+    return clone(this.buildOffboardingContext(internship, record));
+  }
+
+  async upsertOffboarding(
+    internshipId: string,
+    input: OffboardingInput,
+    supervisorId: string | null,
+  ): Promise<InternshipOffboarding> {
+    const internship = this.internshipById(internshipId);
+    if (!internship) throw new Error(`Internship ${internshipId} not found.`);
+    const now = nowIso();
+    const existing = this.db.offboardings.find(
+      (r) => r.internshipId === internshipId,
+    );
+    if (existing) {
+      Object.assign(existing, input);
+      if (supervisorId) existing.supervisorId = supervisorId;
+      existing.updatedAt = now;
+      return clone(existing);
+    }
+    const created: InternshipOffboarding = {
+      id: crypto.randomUUID(),
+      internshipId,
+      supervisorId: supervisorId ?? internship.mentorId,
+      ...input,
+      status: "not_started",
+      completedAt: null,
+      createdAt: now,
+      updatedAt: now,
+    };
+    this.db.offboardings.push(created);
+    return clone(created);
+  }
+
+  async setOffboardingStatus(
+    id: string,
+    status: OffboardingStatus,
+  ): Promise<InternshipOffboarding> {
+    const record = this.db.offboardings.find((r) => r.id === id);
+    if (!record) throw new Error(`Offboarding ${id} not found.`);
     const now = nowIso();
     record.status = status;
     record.completedAt =

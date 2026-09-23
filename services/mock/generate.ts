@@ -23,6 +23,7 @@ import type {
   LearningSource,
   MentorAssignment,
   MonthlyOneOnOne,
+  InternshipOffboarding,
   NotificationRecord,
   MentorFeedback,
   Project,
@@ -78,6 +79,7 @@ export interface MockDataset {
   intelligence: ReportIntelligence[];
   mentorAssignments: MentorAssignment[];
   oneOnOnes: MonthlyOneOnOne[];
+  offboardings: InternshipOffboarding[];
   notifications: NotificationRecord[];
   currentUserId: string;
 }
@@ -452,6 +454,7 @@ export function generateDataset(): MockDataset {
     intelligence,
     mentorAssignments,
     oneOnOnes,
+    offboardings: [],
     notifications: [],
     currentUserId: interns[0]!.id,
   };

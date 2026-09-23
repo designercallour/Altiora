@@ -29,6 +29,10 @@ export const ROUTES = {
   oneOnOne: (internshipId: string, year: number, month: number) =>
     `/one-on-ones/${internshipId}/${year}-${String(month).padStart(2, "0")}`,
   oneOnOneRecord: (id: string) => `/one-on-ones/record/${id}`,
+  // Offboarding
+  offboarding: "/offboarding",
+  offboardingEditor: (internshipId: string) => `/offboarding/${internshipId}`,
+  offboardingRecord: (id: string) => `/offboarding/record/${id}`,
   // Admin management
   adminInterns: "/admin/interns",
   adminMentors: "/admin/mentors",

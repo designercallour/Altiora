@@ -347,6 +347,85 @@ export interface OneOnOneContext {
   reflectionSummary: OneOnOneReflectionSummary;
 }
 
+// ── Internship Offboarding ───────────────────────────────────────────────────
+export type OffboardingStatus = "not_started" | "completed";
+
+export const OFFBOARDING_STATUSES: readonly OffboardingStatus[] = [
+  "not_started",
+  "completed",
+];
+
+/** One founder's two-sided feedback captured during the exit 1-on-1. */
+export interface FounderFeedback {
+  founder: string;
+  good: string | null;
+  improve: string | null;
+}
+
+/** Checkbox state for the prep / handover / LinkedIn checklist items. */
+export type OffboardingChecklist = Record<string, boolean>;
+
+/**
+ * The terminal exit 1-on-1 + handover record — one per internship. Authored by
+ * the supervisor (mentor/admin); the intern sees it read-only once completed.
+ */
+export interface InternshipOffboarding extends Timestamps {
+  id: string;
+  internshipId: string;
+  /** The supervisor who authored the record (snapshot; may differ after reassignment). */
+  supervisorId: string | null;
+  sessionDate: string | null; // ISO date of the exit 1-on-1
+  lastDay: string | null; // ISO date, the intern's final day
+  // 2.2 — intern reflection
+  reflectionAchievement: string | null;
+  reflectionChallenge: string | null;
+  reflectionSkill: string | null;
+  // 2.3 — supervisor → intern
+  supervisorFeedback: string | null;
+  // 2.4 — intern → …
+  feedbackForSupervisor: string | null;
+  founderFeedback: FounderFeedback[];
+  feedbackForTeam: string | null;
+  feedbackForStudio: string | null;
+  wouldRecommend: boolean | null;
+  // 2.5 — career
+  careerPlan: string | null;
+  // 1 / 3 / 4 — checklist
+  checklist: OffboardingChecklist;
+  // 5 — notes
+  notesKeyPoints: string | null;
+  notesFollowUp: string | null;
+  status: OffboardingStatus;
+  completedAt: string | null;
+}
+
+/** A row in the Offboarding management table. */
+export interface OffboardingListItem {
+  /** The saved record id, or null when this internship has no record yet. */
+  id: string | null;
+  internshipId: string;
+  intern: Pick<AppUser, "id" | "fullName" | "avatarUrl">;
+  mentor: Pick<AppUser, "id" | "fullName" | "avatarUrl"> | null;
+  /** The intern's last day (internship end date), for display + sorting. */
+  lastDay: string | null;
+  status: OffboardingStatus;
+  completedAt: string | null;
+  updatedAt: string | null;
+}
+
+/** Everything the Offboarding editor / detail screen needs. */
+export interface OffboardingContext {
+  internshipId: string;
+  intern: Pick<AppUser, "id" | "fullName" | "avatarUrl">;
+  position: string | null; // the intern's role
+  cohort: Cohort | null;
+  mentor: Pick<AppUser, "id" | "fullName" | "avatarUrl"> | null;
+  internshipStartDate: string;
+  internshipEndDate: string | null;
+  /** The saved record, or null if offboarding hasn't been started. */
+  record: InternshipOffboarding | null;
+}
+
 /** All lookup data, loaded once and passed to forms/filters. */
 export interface Lookups {
   departments: Department[];
