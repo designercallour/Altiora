@@ -11,6 +11,7 @@ create table if not exists public.internship_offboardings (
   id                      uuid primary key default gen_random_uuid(),
   internship_id           uuid not null references public.internships (id) on delete cascade,
   supervisor_id           uuid references public.users (id) on delete set null, -- authoring supervisor (snapshot)
+  division                text,
   session_date            date,
   last_day                date,
   -- 2.2 intern reflection
@@ -19,6 +20,8 @@ create table if not exists public.internship_offboardings (
   reflection_skill        text,
   -- 2.3 supervisor -> intern
   supervisor_feedback     text,
+  -- form penilaian (final assessment)
+  assessment_scores       jsonb not null default '[]'::jsonb, -- [{aspect, score, note}]
   -- 2.4 intern -> ...
   feedback_for_supervisor text,
   founder_feedback        jsonb not null default '[]'::jsonb, -- [{founder, good, improve}]
@@ -27,6 +30,7 @@ create table if not exists public.internship_offboardings (
   would_recommend         boolean,
   -- 2.5 career
   career_plan             text,
+  linkedin_deadline       date,
   -- 1 / 3 / 4 checklist
   checklist               jsonb not null default '{}'::jsonb,  -- { key: boolean }
   -- 5 notes

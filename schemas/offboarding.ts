@@ -15,7 +15,14 @@ export const founderFeedbackSchema = z.object({
   improve: z.string().max(3000),
 });
 
+export const assessmentScoreSchema = z.object({
+  aspect: z.string().max(120),
+  score: z.number().int().min(0).max(10).nullable(),
+  note: z.string().max(1000),
+});
+
 export const offboardingValuesSchema = z.object({
+  division: z.string().max(200),
   sessionDate: isoDate,
   lastDay: isoDate,
   // 2.2 — intern reflection
@@ -24,6 +31,8 @@ export const offboardingValuesSchema = z.object({
   reflectionSkill: longText,
   // 2.3 — supervisor → intern
   supervisorFeedback: longText,
+  // form penilaian
+  assessmentScores: z.array(assessmentScoreSchema),
   // 2.4 — intern → …
   feedbackForSupervisor: longText,
   founderFeedback: z.array(founderFeedbackSchema),
@@ -32,6 +41,7 @@ export const offboardingValuesSchema = z.object({
   wouldRecommend: z.enum(["yes", "no", "unsure"]),
   // 2.5 — career
   careerPlan: longText,
+  linkedinDeadline: isoDate,
   // 1 / 3 / 4 — checklist
   checklist: z.record(z.string(), z.boolean()),
   // 5 — notes
@@ -41,3 +51,4 @@ export const offboardingValuesSchema = z.object({
 
 export type OffboardingFormValues = z.infer<typeof offboardingValuesSchema>;
 export type FounderFeedbackValues = z.infer<typeof founderFeedbackSchema>;
+export type AssessmentScoreValues = z.infer<typeof assessmentScoreSchema>;

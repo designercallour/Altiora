@@ -12,7 +12,7 @@ import { Label } from "@/components/ui/label";
 import { Checkbox } from "@/components/ui/checkbox";
 import { Separator } from "@/components/ui/separator";
 import { cn } from "@/lib/utils";
-import { OFFBOARDING_CHECKLIST } from "@/lib/offboarding";
+import { OFFBOARDING_CHECKLIST, ASSESSMENT_SCALE_MAX } from "@/lib/offboarding";
 import type { OffboardingFormValues } from "@/schemas/offboarding";
 import type { OffboardingStatus } from "@/types/domain";
 import { OffboardingStatusBadge } from "./offboarding-status-badge";
@@ -103,6 +103,7 @@ export function OffboardingEditor({
   const checklist = watch("checklist");
   const founders = watch("founderFeedback");
   const recommend = watch("wouldRecommend");
+  const assessment = watch("assessmentScores");
 
   async function run(kind: "draft" | "complete") {
     setSaving(kind);
@@ -128,7 +129,15 @@ export function OffboardingEditor({
     <div className="space-y-10">
       {/* Session info */}
       <section className="space-y-4">
-        <SectionTitle title="Sesi & tanggal" />
+        <SectionTitle title="Info & tanggal" />
+        <div className="space-y-2">
+          <Label htmlFor="division">Divisi / tim</Label>
+          <Input
+            id="division"
+            placeholder="mis. Design — Brand"
+            {...register("division")}
+          />
+        </div>
         <div className="grid gap-4 sm:grid-cols-2">
           <div className="space-y-2">
             <Label htmlFor="sessionDate">Tanggal sesi 1-on-1</Label>
@@ -182,6 +191,60 @@ export function OffboardingEditor({
           rows={6}
           register={register}
         />
+      </section>
+
+      <Separator />
+
+      {/* Form penilaian */}
+      <section className="space-y-5">
+        <SectionTitle
+          title="Form penilaian"
+          description={`Skor tiap aspek (1–${ASSESSMENT_SCALE_MAX}) beserta catatan singkat, dibahas bersama saat sesi.`}
+        />
+        <div className="space-y-4">
+          {assessment.map((row, i) => (
+            <div
+              key={row.aspect}
+              className="border-border bg-muted/30 space-y-3 rounded-xl border p-4"
+            >
+              <div className="flex flex-wrap items-center justify-between gap-3">
+                <p className="text-sm font-medium">{row.aspect}</p>
+                <div className="flex items-center gap-1.5">
+                  {Array.from({ length: ASSESSMENT_SCALE_MAX }, (_, n) => {
+                    const value = n + 1;
+                    const active = row.score === value;
+                    return (
+                      <button
+                        key={value}
+                        type="button"
+                        aria-label={`${row.aspect}: ${value}`}
+                        onClick={() =>
+                          setValue(
+                            `assessmentScores.${i}.score` as const,
+                            active ? null : value,
+                          )
+                        }
+                        className={cn(
+                          "size-8 rounded-lg border text-sm transition-colors",
+                          active
+                            ? "border-primary bg-primary text-primary-foreground"
+                            : "border-border hover:bg-muted",
+                        )}
+                      >
+                        {value}
+                      </button>
+                    );
+                  })}
+                </div>
+              </div>
+              <Textarea
+                rows={2}
+                placeholder="Catatan (opsional) — contoh konkret yang mendasari skor."
+                {...register(`assessmentScores.${i}.note` as const)}
+              />
+            </div>
+          ))}
+        </div>
       </section>
 
       <Separator />
@@ -303,6 +366,17 @@ export function OffboardingEditor({
           label="Rencana karier setelah magang"
           register={register}
         />
+        <div className="space-y-2">
+          <Label htmlFor="linkedinDeadline">
+            Tenggat kirim rekomendasi LinkedIn (dua arah)
+          </Label>
+          <Input
+            id="linkedinDeadline"
+            type="date"
+            className="max-w-xs"
+            {...register("linkedinDeadline")}
+          />
+        </div>
       </section>
 
       <Separator />

@@ -2,6 +2,8 @@ import { Check, Minus } from "lucide-react";
 import { formatDate } from "@/lib/format";
 import {
   OFFBOARDING_CHECKLIST,
+  ASSESSMENT_SCALE_MAX,
+  normalizeAssessmentScores,
   normalizeChecklist,
   normalizeFounderFeedback,
 } from "@/lib/offboarding";
@@ -43,11 +45,14 @@ export function OffboardingRecordView({
 }) {
   const founders = normalizeFounderFeedback(record.founderFeedback);
   const checklist = normalizeChecklist(record.checklist);
+  const assessment = normalizeAssessmentScores(record.assessmentScores);
+  const hasAssessment = assessment.some((s) => s.score != null || s.note);
 
   return (
     <div className="space-y-10">
-      {(record.sessionDate || record.lastDay) && (
+      {(record.division || record.sessionDate || record.lastDay) && (
         <div className="text-muted-foreground flex flex-wrap gap-x-8 gap-y-1 text-sm">
+          {record.division && <span>Divisi / tim: {record.division}</span>}
           {record.sessionDate && (
             <span>Sesi 1-on-1: {formatDate(record.sessionDate)}</span>
           )}
@@ -81,6 +86,40 @@ export function OffboardingRecordView({
         <section className="space-y-4">
           <SectionTitle>Feedback supervisor untuk kamu</SectionTitle>
           <Block label="Feedback supervisor" value={record.supervisorFeedback} />
+        </section>
+      )}
+
+      {hasAssessment && (
+        <section className="space-y-4">
+          <SectionTitle>Form penilaian</SectionTitle>
+          <div className="space-y-2.5">
+            {assessment
+              .filter((s) => s.score != null || s.note)
+              .map((s) => (
+                <div
+                  key={s.aspect}
+                  className="border-border bg-muted/30 space-y-1 rounded-xl border p-3"
+                >
+                  <div className="flex items-center justify-between gap-3">
+                    <span className="text-sm font-medium">{s.aspect}</span>
+                    {s.score != null && (
+                      <span className="text-sm">
+                        <span className="text-foreground font-semibold">
+                          {s.score}
+                        </span>
+                        <span className="text-muted-foreground">
+                          {" "}
+                          / {ASSESSMENT_SCALE_MAX}
+                        </span>
+                      </span>
+                    )}
+                  </div>
+                  {s.note && (
+                    <p className="text-muted-foreground text-sm">{s.note}</p>
+                  )}
+                </div>
+              ))}
+          </div>
         </section>
       )}
 
@@ -138,10 +177,16 @@ export function OffboardingRecordView({
       </section>
       )}
 
-      {record.careerPlan && (
+      {(record.careerPlan || record.linkedinDeadline) && (
         <section className="space-y-4">
           <SectionTitle>Karier</SectionTitle>
           <Block label="Rencana setelah magang" value={record.careerPlan} />
+          {record.linkedinDeadline && (
+            <Block
+              label="Tenggat rekomendasi LinkedIn"
+              value={formatDate(record.linkedinDeadline)}
+            />
+          )}
         </section>
       )}
 

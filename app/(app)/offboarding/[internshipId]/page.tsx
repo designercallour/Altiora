@@ -4,6 +4,7 @@ import { ArrowLeft, CalendarClock, DoorOpen } from "lucide-react";
 import { getCurrentUser } from "@/lib/session";
 import { getDataSource } from "@/services";
 import { isOffboardingAvailable } from "@/lib/offboarding";
+import { formatDate } from "@/lib/format";
 import { ROUTES } from "@/lib/constants";
 import { PageContainer } from "@/components/shared/page-container";
 import { PageHeader } from "@/components/shared/page-header";
@@ -90,6 +91,10 @@ export default async function OffboardingEditorPage({
         {ctx.cohort ? (
           <span className="text-muted-foreground">{ctx.cohort.name}</span>
         ) : null}
+        <span className="text-muted-foreground">
+          Periode: {formatDate(ctx.internshipStartDate)}
+          {ctx.internshipEndDate ? ` – ${formatDate(ctx.internshipEndDate)}` : ""}
+        </span>
         <span className="text-muted-foreground">
           Supervisor: {ctx.mentor?.fullName ?? "Unassigned"}
         </span>

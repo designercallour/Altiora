@@ -23,6 +23,7 @@ import type {
   MentorSummary,
   MonthlyOneOnOne,
   NotificationRecord,
+  AssessmentScore,
   FounderFeedback,
   InternshipOffboarding,
   OffboardingChecklist,
@@ -161,18 +162,21 @@ export interface OffboardingQuery {
 }
 
 export interface OffboardingInput {
+  division: string | null;
   sessionDate: string | null;
   lastDay: string | null;
   reflectionAchievement: string | null;
   reflectionChallenge: string | null;
   reflectionSkill: string | null;
   supervisorFeedback: string | null;
+  assessmentScores: AssessmentScore[];
   feedbackForSupervisor: string | null;
   founderFeedback: FounderFeedback[];
   feedbackForTeam: string | null;
   feedbackForStudio: string | null;
   wouldRecommend: boolean | null;
   careerPlan: string | null;
+  linkedinDeadline: string | null;
   checklist: OffboardingChecklist;
   notesKeyPoints: string | null;
   notesFollowUp: string | null;

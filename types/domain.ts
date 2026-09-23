@@ -362,6 +362,13 @@ export interface FounderFeedback {
   improve: string | null;
 }
 
+/** A single scored aspect on the final assessment (form penilaian). */
+export interface AssessmentScore {
+  aspect: string;
+  score: number | null; // 1..ASSESSMENT_SCALE_MAX
+  note: string | null;
+}
+
 /** Checkbox state for the prep / handover / LinkedIn checklist items. */
 export type OffboardingChecklist = Record<string, boolean>;
 
@@ -374,6 +381,7 @@ export interface InternshipOffboarding extends Timestamps {
   internshipId: string;
   /** The supervisor who authored the record (snapshot; may differ after reassignment). */
   supervisorId: string | null;
+  division: string | null; // divisi / tim
   sessionDate: string | null; // ISO date of the exit 1-on-1
   lastDay: string | null; // ISO date, the intern's final day
   // 2.2 — intern reflection
@@ -382,6 +390,8 @@ export interface InternshipOffboarding extends Timestamps {
   reflectionSkill: string | null;
   // 2.3 — supervisor → intern
   supervisorFeedback: string | null;
+  // form penilaian (final assessment scores)
+  assessmentScores: AssessmentScore[];
   // 2.4 — intern → …
   feedbackForSupervisor: string | null;
   founderFeedback: FounderFeedback[];
@@ -390,6 +400,7 @@ export interface InternshipOffboarding extends Timestamps {
   wouldRecommend: boolean | null;
   // 2.5 — career
   careerPlan: string | null;
+  linkedinDeadline: string | null; // agreed deadline to send LinkedIn recs
   // 1 / 3 / 4 — checklist
   checklist: OffboardingChecklist;
   // 5 — notes

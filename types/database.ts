@@ -11,6 +11,7 @@
  */
 
 import type {
+  AssessmentScore,
   FounderFeedback,
   InternshipStatus,
   OffboardingChecklist,
@@ -242,18 +243,21 @@ export interface InternshipOffboardingRow {
   id: string;
   internship_id: string;
   supervisor_id: string | null;
+  division: string | null;
   session_date: string | null;
   last_day: string | null;
   reflection_achievement: string | null;
   reflection_challenge: string | null;
   reflection_skill: string | null;
   supervisor_feedback: string | null;
+  assessment_scores: AssessmentScore[]; // jsonb
   feedback_for_supervisor: string | null;
   founder_feedback: FounderFeedback[]; // jsonb
   feedback_for_team: string | null;
   feedback_for_studio: string | null;
   would_recommend: boolean | null;
   career_plan: string | null;
+  linkedin_deadline: string | null;
   checklist: OffboardingChecklist; // jsonb
   notes_key_points: string | null;
   notes_follow_up: string | null;

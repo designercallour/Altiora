@@ -7,6 +7,7 @@
  * authored by the supervisor. See the offboarding checklist source document.
  */
 import type {
+  AssessmentScore,
   FounderFeedback,
   Internship,
   OffboardingChecklist,
@@ -40,6 +41,47 @@ export function normalizeFounderFeedback(
     founder,
     good: byName.get(founder)?.good ?? null,
     improve: byName.get(founder)?.improve ?? null,
+  }));
+}
+
+// ── Final assessment (form penilaian) ────────────────────────────────────────
+/** Max score on the assessment scale (1..MAX). */
+export const ASSESSMENT_SCALE_MAX = 5;
+
+/**
+ * Aspects scored on the final assessment. Defaults tuned for a design studio
+ * internship — edit freely; scores + notes are stored per aspect.
+ */
+export const ASSESSMENT_ASPECTS = [
+  "Komunikasi",
+  "Kualitas kerja",
+  "Inisiatif & problem solving",
+  "Kolaborasi tim",
+  "Manajemen waktu & deadline",
+  "Sikap & profesionalisme",
+] as const;
+
+/** A fresh, empty assessment (one row per aspect). */
+export function emptyAssessmentScores(): AssessmentScore[] {
+  return ASSESSMENT_ASPECTS.map((aspect) => ({
+    aspect,
+    score: null,
+    note: null,
+  }));
+}
+
+/**
+ * Merge saved scores onto the canonical aspect list so the table always has one
+ * row per current aspect, in order — tolerant of added/removed aspects.
+ */
+export function normalizeAssessmentScores(
+  saved: AssessmentScore[] | null | undefined,
+): AssessmentScore[] {
+  const byAspect = new Map((saved ?? []).map((s) => [s.aspect, s]));
+  return ASSESSMENT_ASPECTS.map((aspect) => ({
+    aspect,
+    score: byAspect.get(aspect)?.score ?? null,
+    note: byAspect.get(aspect)?.note ?? null,
   }));
 }
 

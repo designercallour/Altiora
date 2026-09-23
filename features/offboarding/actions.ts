@@ -58,12 +58,18 @@ function nullIfEmpty(s: string): string | null {
 
 function toInput(values: OffboardingFormValues): OffboardingInput {
   return {
+    division: nullIfEmpty(values.division),
     sessionDate: nullIfEmpty(values.sessionDate),
     lastDay: nullIfEmpty(values.lastDay),
     reflectionAchievement: nullIfEmpty(values.reflectionAchievement),
     reflectionChallenge: nullIfEmpty(values.reflectionChallenge),
     reflectionSkill: nullIfEmpty(values.reflectionSkill),
     supervisorFeedback: nullIfEmpty(values.supervisorFeedback),
+    assessmentScores: values.assessmentScores.map((s) => ({
+      aspect: s.aspect,
+      score: s.score,
+      note: nullIfEmpty(s.note),
+    })),
     feedbackForSupervisor: nullIfEmpty(values.feedbackForSupervisor),
     founderFeedback: values.founderFeedback.map((f) => ({
       founder: f.founder,
@@ -79,6 +85,7 @@ function toInput(values: OffboardingFormValues): OffboardingInput {
           ? false
           : null,
     careerPlan: nullIfEmpty(values.careerPlan),
+    linkedinDeadline: nullIfEmpty(values.linkedinDeadline),
     checklist: values.checklist,
     notesKeyPoints: nullIfEmpty(values.notesKeyPoints),
     notesFollowUp: nullIfEmpty(values.notesFollowUp),
