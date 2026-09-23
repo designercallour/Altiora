@@ -1,6 +1,15 @@
 import type { Metadata } from "next";
+import Link from "next/link";
 import { redirect } from "next/navigation";
-import { GraduationCap, Sparkles, LogOut, Award } from "lucide-react";
+import {
+  GraduationCap,
+  Sparkles,
+  LogOut,
+  Award,
+  NotebookPen,
+  DoorOpen,
+  ArrowRight,
+} from "lucide-react";
 import { getCurrentUser } from "@/lib/session";
 import { getDataSource } from "@/services";
 import { signOut } from "@/features/auth/actions";
@@ -15,11 +24,13 @@ export default async function InternshipCompletePage() {
   const user = await getCurrentUser();
   if (!user) redirect(ROUTES.login);
 
+  const db = getDataSource();
+
   // Admins/mentors don't belong here; and an intern whose internship is active
   // should be in the app, not on this page.
   const internship =
     user.role === "intern"
-      ? await getDataSource().getActiveInternshipForUser(user.id)
+      ? await db.getActiveInternshipForUser(user.id)
       : null;
   const life = internship ? internshipLifecycle(internship) : null;
   if (user.role !== "intern" || life?.status === "active") {
@@ -87,6 +98,34 @@ export default async function InternshipCompletePage() {
             Keep reflecting, keep building. The habit of noticing how you grow is
             yours to keep — long after the internship ends.
           </p>
+        ) : null}
+
+        {/* Read-only access to their record */}
+        {!notStarted ? (
+          <div className="mx-auto mt-8 grid max-w-sm gap-2.5 text-left">
+            <Link
+              href={ROUTES.reports}
+              className="group border-border bg-card hover:border-primary/30 focus-visible:ring-ring/50 flex items-center gap-3 rounded-xl border p-4 transition-colors outline-none focus-visible:ring-2"
+            >
+              <span className="bg-primary/10 text-primary flex size-9 shrink-0 items-center justify-center rounded-lg">
+                <NotebookPen className="size-4.5" />
+              </span>
+              <span className="flex-1 text-sm font-medium">
+                Weekly Reflections
+              </span>
+              <ArrowRight className="text-muted-foreground size-4 shrink-0 transition-transform group-hover:translate-x-0.5" />
+            </Link>
+            <Link
+              href={ROUTES.offboarding}
+              className="group border-border bg-card hover:border-primary/30 focus-visible:ring-ring/50 flex items-center gap-3 rounded-xl border p-4 transition-colors outline-none focus-visible:ring-2"
+            >
+              <span className="bg-primary/10 text-primary flex size-9 shrink-0 items-center justify-center rounded-lg">
+                <DoorOpen className="size-4.5" />
+              </span>
+              <span className="flex-1 text-sm font-medium">Offboarding</span>
+              <ArrowRight className="text-muted-foreground size-4 shrink-0 transition-transform group-hover:translate-x-0.5" />
+            </Link>
+          </div>
         ) : null}
 
         {/* Alumni placeholder */}

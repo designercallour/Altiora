@@ -381,6 +381,40 @@ create index if not exists monthly_one_on_ones_internship_idx
 create index if not exists monthly_one_on_ones_mentor_idx
   on public.monthly_one_on_ones (mentor_id);
 
+-- Internship offboarding: one exit 1-on-1 + handover record per internship.
+create table if not exists public.internship_offboardings (
+  id                      uuid primary key default gen_random_uuid(),
+  internship_id           uuid not null references public.internships (id) on delete cascade,
+  supervisor_id           uuid references public.users (id) on delete set null,
+  division                text,
+  session_date            date,
+  last_day                date,
+  reflection_achievement  text,
+  reflection_challenge    text,
+  reflection_skill        text,
+  supervisor_feedback     text,
+  assessment_scores       jsonb not null default '[]'::jsonb,
+  feedback_for_supervisor text,
+  founder_feedback        jsonb not null default '[]'::jsonb,
+  feedback_for_team       text,
+  feedback_for_studio     text,
+  would_recommend         boolean,
+  career_plan             text,
+  linkedin_deadline       date,
+  checklist               jsonb not null default '{}'::jsonb,
+  notes_key_points        text,
+  notes_follow_up         text,
+  status                  text not null default 'not_started'
+                            check (status in ('not_started', 'completed')),
+  completed_at            timestamptz,
+  created_at              timestamptz not null default now(),
+  updated_at              timestamptz not null default now()
+);
+create unique index if not exists internship_offboardings_internship_key
+  on public.internship_offboardings (internship_id);
+create index if not exists internship_offboardings_supervisor_idx
+  on public.internship_offboardings (supervisor_id);
+
 -- ----------------------------------------------------------------------------
 -- updated_at triggers
 -- ----------------------------------------------------------------------------
@@ -391,7 +425,8 @@ declare
     'departments','teams','cohorts','projects','skill_categories','skills',
     'learning_categories','learning_sources','users','internships',
     'weekly_reports','weekly_skill_scores','learning_logs','mentor_feedback',
-    'report_intelligence','mentor_assignments','monthly_one_on_ones'
+    'report_intelligence','mentor_assignments','monthly_one_on_ones',
+    'internship_offboardings'
   ];
 begin
   foreach t in array tables loop
@@ -430,7 +465,7 @@ declare t text;
     'learning_categories','learning_sources','users','internships',
     'weekly_reports','weekly_skill_scores','learning_logs','mentor_feedback',
     'report_intelligence','mentor_assignments','notifications',
-    'monthly_one_on_ones'
+    'monthly_one_on_ones','internship_offboardings'
   ];
 begin
   foreach t in array tables loop
@@ -692,6 +727,36 @@ create policy "ooo_intern_select" on public.monthly_one_on_ones for select
     and exists (
       select 1 from public.internships i
       where i.id = monthly_one_on_ones.internship_id
+        and i.user_id = public.current_app_user_id()
+    )
+  );
+
+-- Internship offboarding -------------------------------------------------------
+drop policy if exists "off_admin_all"     on public.internship_offboardings;
+drop policy if exists "off_mentor_all"    on public.internship_offboardings;
+drop policy if exists "off_intern_select" on public.internship_offboardings;
+
+create policy "off_admin_all" on public.internship_offboardings for all
+  using (public.is_admin()) with check (public.is_admin());
+
+create policy "off_mentor_all" on public.internship_offboardings for all
+  using (exists (
+    select 1 from public.internships i
+    where i.id = internship_offboardings.internship_id
+      and i.mentor_id = public.current_app_user_id()
+  ))
+  with check (exists (
+    select 1 from public.internships i
+    where i.id = internship_offboardings.internship_id
+      and i.mentor_id = public.current_app_user_id()
+  ));
+
+create policy "off_intern_select" on public.internship_offboardings for select
+  using (
+    status = 'completed'
+    and exists (
+      select 1 from public.internships i
+      where i.id = internship_offboardings.internship_id
         and i.user_id = public.current_app_user_id()
     )
   );

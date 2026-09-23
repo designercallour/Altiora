@@ -23,6 +23,13 @@ import type {
   MentorSummary,
   MonthlyOneOnOne,
   NotificationRecord,
+  AssessmentScore,
+  FounderFeedback,
+  InternshipOffboarding,
+  OffboardingChecklist,
+  OffboardingContext,
+  OffboardingListItem,
+  OffboardingStatus,
   OneOnOneContext,
   OneOnOneListItem,
   OneOnOneStatus,
@@ -143,6 +150,36 @@ export interface OneOnOneNotesInput {
   strengths: string | null;
   concerns: string | null;
   goalsNextMonth: string | null;
+}
+
+export interface OffboardingQuery {
+  /** Existing records where this user is the assigned mentor of the internship. */
+  mentorId?: string;
+  internshipId?: string;
+  /** Existing records for the internship(s) belonging to this intern user. */
+  internUserId?: string;
+  status?: OffboardingStatus;
+}
+
+export interface OffboardingInput {
+  division: string | null;
+  sessionDate: string | null;
+  lastDay: string | null;
+  reflectionAchievement: string | null;
+  reflectionChallenge: string | null;
+  reflectionSkill: string | null;
+  supervisorFeedback: string | null;
+  assessmentScores: AssessmentScore[];
+  feedbackForSupervisor: string | null;
+  founderFeedback: FounderFeedback[];
+  feedbackForTeam: string | null;
+  feedbackForStudio: string | null;
+  wouldRecommend: boolean | null;
+  careerPlan: string | null;
+  linkedinDeadline: string | null;
+  checklist: OffboardingChecklist;
+  notesKeyPoints: string | null;
+  notesFollowUp: string | null;
 }
 
 export interface NotificationInput {
@@ -280,4 +317,29 @@ export interface DataSource {
     id: string,
     status: OneOnOneStatus,
   ): Promise<MonthlyOneOnOne>;
+
+  // Internship offboarding -----------------------------------------------------
+  /** Existing offboarding records matching the query, soonest last-day first. */
+  listOffboardings(query?: OffboardingQuery): Promise<OffboardingListItem[]>;
+  /** A saved record hydrated with intern info, or null. */
+  getOffboardingById(id: string): Promise<OffboardingContext | null>;
+  /**
+   * Editor context for an internship: the intern's info + the offboarding
+   * record (null if not started). Returns null only when the internship doesn't
+   * exist.
+   */
+  getOffboardingContext(
+    internshipId: string,
+  ): Promise<OffboardingContext | null>;
+  /** Create or update (by internship) the offboarding record. */
+  upsertOffboarding(
+    internshipId: string,
+    input: OffboardingInput,
+    supervisorId: string | null,
+  ): Promise<InternshipOffboarding>;
+  /** Flip a record's status (sets/clears completed_at accordingly). */
+  setOffboardingStatus(
+    id: string,
+    status: OffboardingStatus,
+  ): Promise<InternshipOffboarding>;
 }

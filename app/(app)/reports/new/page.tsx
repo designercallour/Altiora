@@ -10,9 +10,11 @@ import {
   isWeeklyReflectionOpen,
   currentReflectionWeek,
 } from "@/lib/week";
+import { isInternshipActive } from "@/lib/internship";
 import { PageContainer } from "@/components/shared/page-container";
 import { PageHeader } from "@/components/shared/page-header";
 import { EmptyState } from "@/components/shared/empty-state";
+import { LinkButton } from "@/components/shared/link-button";
 import { CalendarClock } from "lucide-react";
 import { ReportWizard } from "@/features/weekly-report/components/report-wizard";
 import {
@@ -44,6 +46,29 @@ export default async function NewReportPage({
             icon={NotebookPen}
             title="No active internship"
             description="Weekly reports belong to an active internship. Mentors and admins review reflections from the dashboard instead."
+          />
+        </div>
+      </PageContainer>
+    );
+  }
+
+  // The internship has ended — reflections are closed (also enforced in the
+  // submit action). Point them back to their read-only history.
+  if (!isInternshipActive(internship)) {
+    return (
+      <PageContainer size="narrow">
+        <PageHeader
+          title="Weekly Report"
+          description="Your internship has ended, so new reflections are closed."
+        />
+        <div className="mt-8">
+          <EmptyState
+            icon={CalendarClock}
+            title="Reflections are closed"
+            description="Your internship is complete. You can still revisit all your past reflections anytime."
+            action={
+              <LinkButton href={ROUTES.reports}>View your reflections</LinkButton>
+            }
           />
         </div>
       </PageContainer>

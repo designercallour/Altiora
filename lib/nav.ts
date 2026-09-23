@@ -1,5 +1,6 @@
 import type { LucideIcon } from "lucide-react";
 import {
+  DoorOpen,
   GraduationCap,
   LayoutDashboard,
   Layers,
@@ -47,6 +48,13 @@ export const PRIMARY_NAV: NavItem[] = [
     href: ROUTES.oneOnOnes,
     icon: MessagesSquare,
     description: "Monthly mentor check-ins",
+    roles: ["admin", "mentor", "intern"],
+  },
+  {
+    label: "Offboarding",
+    href: ROUTES.offboarding,
+    icon: DoorOpen,
+    description: "Exit 1-on-1 & handover",
     roles: ["admin", "mentor", "intern"],
   },
   {
